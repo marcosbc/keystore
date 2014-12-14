@@ -19,6 +19,8 @@ int store_init()
 
 	DEBUG_PRINT("notice: database starting\n");
 
+	memory_init();
+
 	// here we should ideally keep our daemon running and
 	// check that our memory-values are the same as our
 	// disk values
@@ -89,7 +91,7 @@ returned non-zero exit code %d\n",
 			// now, end our threads
 			for(i = 0; i < num_dbs && ! therr; i++)
 			{
-				DEBUG_PRINT("notice: [parent] ending thread#%d %d...\n",
+				DEBUG_PRINT("notice: [parent] ending thread#parent-%d %d...\n",
 				            i, (int) thids[i]);
 				
 				therr = pthread_join(thids[i], NULL);
@@ -102,7 +104,7 @@ returned non-zero exit code %d\n",
 					error = 20;
 				}
 
-				DEBUG_PRINT("notice: [parent] ended thread#%d %d\n",
+				DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d\n",
 				            i, (int) thids[i]);
 
 				// fclose();
@@ -173,7 +175,7 @@ returned non-zero exit code %d\n",
 			// now, end our threads
 			for(i = 0; i < num_dbs && ! therr; i++)
 			{
-				DEBUG_PRINT("notice: [child] ending thread#%d %d...\n",
+				DEBUG_PRINT("notice: [child] ending thread#child-%d %d...\n",
 				            i, (int) thids[i]);
 				
 				therr = pthread_join(thids[i], NULL);
@@ -186,7 +188,7 @@ returned non-zero exit code %d\n",
 					error = 20;
 				}
 				
-				DEBUG_PRINT("notice: [child] ended thread#%d %d\n",
+				DEBUG_PRINT("notice: [child] ended thread#child-%d %d\n",
 				            i, (int) thids[i]);
 			}
 		}
@@ -235,7 +237,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
 	entries = (store_entry *) calloc(num_dbs, sizeof(store_entry));
 
-	if(thids != NULL)
+	if(thids != NULL && entries != NULL)
 	{
 		for(i = 0; i < num_dbs; i++)
 		{
@@ -290,6 +292,16 @@ returned non-zero exit code %d\n",
 		error = 5;
 	}
 
+	if(thids != NULL)
+	{
+		free(thids);
+	}
+
+	if(entries != NULL)
+	{
+		free(entries);
+	}
+
 	return error;
 }
 
@@ -298,6 +310,8 @@ int store_halt()
 	int error = 0;
 
 	DEBUG_PRINT("notice: database preparing to shut down\n");
+
+	memory_clear();
 
 	// free our memory
 	// here we should ideally check that our disk-values are

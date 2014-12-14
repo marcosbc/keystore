@@ -19,10 +19,18 @@
 #define DEBUG_PRINT(...) {}
 #endif
 
-#define MAX_PATH_SIZE 1024
-#define MAX_DB_SIZE 16
-#define MAX_KEY_SIZE 16
-#define MAX_VAL_SIZE 512
+#define MAX_PATH_SIZE	1024
+#define MAX_DB_SIZE		16
+#define MAX_KEY_SIZE	16
+#define MAX_VAL_SIZE	512
+
+// for shared memory RW (we want to be able to have multiple readers,
+// but block them only if we are writing)
+#define MAX_READERS_AT_ONCE 10
+#define ONE             1
+
+#define SEM_MUTEX		"mutex"
+#define SEM_RW			"readwrite"
 
 typedef struct entry {
 	char key[MAX_KEY_SIZE];
