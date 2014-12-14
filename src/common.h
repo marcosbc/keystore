@@ -21,6 +21,7 @@
 
 #define MAX_PATH_SIZE	1024
 #define MAX_DB_SIZE		16
+#define MAX_DICT_SIZE	16
 #define MAX_KEY_SIZE	16
 #define MAX_VAL_SIZE	512
 
@@ -32,11 +33,32 @@
 #define SEM_MUTEX		"mutex"
 #define SEM_RW			"readwrite"
 
+// entry type
+// why double-linked list? because we modify each entry after write
+// to have a more fair search
 typedef struct entry {
 	char key[MAX_KEY_SIZE];
 	char val[MAX_VAL_SIZE];
 	char db[MAX_DB_SIZE];
 	struct entry *next;
+	struct entry *prev;
 } store_entry;
+
+// dictionary type
+// why double-linked list? because we modify each dictionary after write
+// to have a more fair search
+// why tree? -> first_dic:second_dic:third_dic:entry
+typedef struct dictionary {
+	char name[MAX_DICT_SIZE];
+	struct entry *start;
+	struct dictionary *next;
+	struct dictionary *prev;
+	struct dictionary *children;
+} store_dictionary;
+
+typedef struct db {
+	char name[MAX_DB_SIZE];
+	struct dictionary *dict;
+} store_db;
 
 #endif
