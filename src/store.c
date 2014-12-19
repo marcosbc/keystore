@@ -45,9 +45,88 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	print_databases(num_dbs, dbs);
 	#endif
 
+	// the parent process modifies the memory so we can print our results
+	// faster and let the other process continue writing to disk
 	pid = fork();
 	if(pid > 0)
-	{	
+	{
+		// create our thread entries and store entries
+		thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
+		entries = (store_entry *) calloc(num_dbs, sizeof(store_entry));
+
+		if(thids != NULL && entries != NULL)
+		{
+			// children - alter the database in memory
+			for(i = 0; i < num_dbs && ! therr; i++)
+			{
+				// set up our entry
+				strcpy(entries[i].key, key);
+				strcpy(entries[i].val, value);
+				strcpy(entries[i].db, dbs[i]);
+				DEBUG_PRINT("notice: store_entry variable: key=\"%s\" \
+value=\"%s\" db=\"%s\"\n",
+			                entries[i].key, entries[i].val, entries[i].db);
+				
+				DEBUG_PRINT("notice: [child] thread#%d %d to insert in db \"%s\"\n",
+				            i, (int) thids[i], dbs[i]);
+				
+				// create our thread
+				therr = pthread_create(&thids[i], NULL, memory_set, &entries[i]);
+				
+				DEBUG_PRINT("notice: [child] thread#%d %d to insert in db \"%s\"\n",
+				            i, (int) thids[i], dbs[i]);
+
+				if(therr != 0)
+				{
+					DEBUG_PRINT("error: [child] pthread_create for thread#%d %d \
+returned non-zero exit code %d\n",
+					            i, (int) thids[i], therr);
+					error = 20;
+				}
+			}
+
+			// set the number of iterations that went correctly
+			num_dbs = i;
+			therr = 0;
+			
+			// now, end our threads
+			for(i = 0; i < num_dbs && ! therr; i++)
+			{
+				DEBUG_PRINT("notice: [child] ending thread#child-%d %d...\n",
+				            i, (int) thids[i]);
+				
+				therr = pthread_join(thids[i], NULL);
+
+				if(therr != 0)
+				{
+					DEBUG_PRINT("error: [child] pthread_join for thread#%d %d \
+returned non-zero exit code %d\n",
+					            i, (int) thids[i], therr);
+					error = 20;
+				}
+				
+				DEBUG_PRINT("notice: [child] ended thread#child-%d %d\n",
+				            i, (int) thids[i]);
+			}
+		}
+		else
+		{
+			DEBUG_PRINT("error: calloc returned NULL\n");
+			error = 5;
+		}
+
+		if(thids != NULL)
+		{
+			free(thids);
+		}
+
+		if(entries != NULL)
+		{
+			free(entries);
+		}
+	}
+	else if(pid == 0)
+	{
 		// create our thread entries and store entries
 		thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
 		entries = (store_entry *) calloc(num_dbs, sizeof(store_entry));
@@ -129,83 +208,6 @@ returned non-zero exit code %d\n",
 		if(fids != NULL)
 		{
 			free(fids);
-		}
-	}
-	else if(pid == 0)
-	{
-		// create our thread entries and store entries
-		thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
-		entries = (store_entry *) calloc(num_dbs, sizeof(store_entry));
-
-		if(thids != NULL && entries != NULL)
-		{
-			// children - alter the database in memory
-			for(i = 0; i < num_dbs && ! therr; i++)
-			{
-				// set up our entry
-				strcpy(entries[i].key, key);
-				strcpy(entries[i].val, value);
-				strcpy(entries[i].db, dbs[i]);
-				DEBUG_PRINT("notice: store_entry variable: key=\"%s\" \
-value=\"%s\" db=\"%s\"\n",
-			                entries[i].key, entries[i].val, entries[i].db);
-				
-				DEBUG_PRINT("notice: [child] thread#%d %d to insert in db \"%s\"\n",
-				            i, (int) thids[i], dbs[i]);
-				
-				// create our thread
-				therr = pthread_create(&thids[i], NULL, memory_set, &entries[i]);
-				
-				DEBUG_PRINT("notice: [child] thread#%d %d to insert in db \"%s\"\n",
-				            i, (int) thids[i], dbs[i]);
-
-				if(therr != 0)
-				{
-					DEBUG_PRINT("error: [child] pthread_create for thread#%d %d \
-returned non-zero exit code %d\n",
-					            i, (int) thids[i], therr);
-					error = 20;
-				}
-			}
-
-			// set the number of iterations that went correctly
-			num_dbs = i;
-			therr = 0;
-			
-			// now, end our threads
-			for(i = 0; i < num_dbs && ! therr; i++)
-			{
-				DEBUG_PRINT("notice: [child] ending thread#child-%d %d...\n",
-				            i, (int) thids[i]);
-				
-				therr = pthread_join(thids[i], NULL);
-
-				if(therr != 0)
-				{
-					DEBUG_PRINT("error: [child] pthread_join for thread#%d %d \
-returned non-zero exit code %d\n",
-					            i, (int) thids[i], therr);
-					error = 20;
-				}
-				
-				DEBUG_PRINT("notice: [child] ended thread#child-%d %d\n",
-				            i, (int) thids[i]);
-			}
-		}
-		else
-		{
-			DEBUG_PRINT("error: calloc returned NULL\n");
-			error = 5;
-		}
-
-		if(thids != NULL)
-		{
-			free(thids);
-		}
-
-		if(entries != NULL)
-		{
-			free(entries);
 		}
 	}
 	else
