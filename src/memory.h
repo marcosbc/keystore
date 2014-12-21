@@ -9,9 +9,6 @@
 
 #include <semaphore.h>
 
-#define KEY_ID 'K'
-#define SHM_SIZE 1024
-
 int memory_init();
 void *memory_set(void *ent);
 void *memory_get(void *ent);

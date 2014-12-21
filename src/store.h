@@ -14,6 +14,7 @@ int store_halt();
 
 #ifdef __DEBUG__
 void print_databases(int num_dbs, char *dbs[]);
+void print_existing_databases(store_db *store_dbs);
 #endif
 
 #endif

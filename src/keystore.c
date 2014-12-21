@@ -16,8 +16,8 @@
 // - get
 
 // fork:
-// - parent: alter the database file
-// - children: alter the database in memory 
+// - parent: alter the database in memory
+// - children: alter the database file 
 
 // threads:
 //   for searching through multiple databases
@@ -66,10 +66,10 @@ int main(int argc, char *argv[])
 	}
 	else
 	{
-		DEBUG_PRINT("error: check arguments\n");
-		fprintf(stderr, "%s\n", USE_MSG);
-		error_type = 1;
+		error_type = ERR_USE;
 	}
+
+	print_error_case(error_type);
 
 	DEBUG_PRINT("notice: returning error_type %d\n", error_type);
 	return error_type;

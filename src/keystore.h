@@ -7,8 +7,6 @@
 #ifndef __KEYSTORE__
 #define __KEYSTORE__
 
-#define USE_MSG "use: ./keystore [set KEY VALUE|get KEY] DB1[ DB2[ ...]]"
-
 #define MODE                1
 #define MODE_INIT           "start"
 #define MODE_INIT_ID        1
@@ -33,5 +31,7 @@
 #define HALT_NUM_ARGS       2 // 1 + 1
 
 int check_arguments(int num, char *args[], int *mode);
+void print_error_case(int error);
+void print_error(char *msg);
 
 #endif
