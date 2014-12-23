@@ -30,6 +30,7 @@ int main(int argc, char *argv[])
 	int error_type = 0;
 	int mode = 0;
 	int arguments_ok = check_arguments(argc, argv, &mode);
+
 	DEBUG_PRINT("notice: check_arguments() returned %d\n", arguments_ok);
 
 	// make sure our arguments get passed correctly
@@ -71,7 +72,6 @@ int main(int argc, char *argv[])
 
 	print_error_case(error_type);
 
-	DEBUG_PRINT("notice: returning error_type %d\n", error_type);
 	return error_type;
 }
 

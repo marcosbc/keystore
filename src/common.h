@@ -51,8 +51,9 @@
 #define MAX_PATH_SIZE	1024
 #define MAX_DB_SIZE		16
 #define MAX_DICT_SIZE	16
-#define MAX_KEY_SIZE	16
+#define MAX_KEY_SIZE	32
 #define MAX_VAL_SIZE	512
+#define COLLECTION_DELIMITER '.'
 
 // for shared memory RW (we want to be able to have multiple readers,
 // but block them only if we are writing)
@@ -75,8 +76,9 @@ typedef struct entry {
 typedef struct collection {
 	char name[MAX_DICT_SIZE];
 	struct entry *ent;
-	struct collection *next;
-	// struct dictionary *children;
+	struct collection *next; // in chronological order
+	struct collection *children;
+	struct collection *brother;
 } store_collection;
 
 // why not double-linked list? because the first one is created in
@@ -87,6 +89,7 @@ typedef struct db {
 	struct db *next;
 } store_db;
 
+int extract_collection(char collection[MAX_KEY_SIZE], char key[MAX_KEY_SIZE]);
 void print_error_case(int error);
 void print_error(char *msg);
 int max(int x, int y);

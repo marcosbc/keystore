@@ -19,12 +19,12 @@
 
 #define INIT_NUM_ARGS       2 // 1 + 1
 
-#define SET_MIN_NUM_ARGS    6 // 5 + 1
+#define SET_MIN_NUM_ARGS    5 // 4 + 1
 #define SET_KEY             2
 #define SET_VAL             3
 #define SET_NAMES           4
 
-#define GET_MIN_NUM_ARGS    5 // 4 + 1
+#define GET_MIN_NUM_ARGS    4 // 3 + 1
 #define GET_KEY             2
 #define GET_NAMES           3
 

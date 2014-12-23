@@ -28,7 +28,7 @@ int store_init()
 	shmid = shmget(shm_key, sizeof(struct db), IPC_CREAT | IPC_EXCL | 0660);
 
 	// we shouldn't be able to initialize memory when it has already been done
-	if(-1 == shmid)
+	if(-1 != shmid)
 	{
 		// create additional semaphores and initiate our store db
 		memory_init();
@@ -44,11 +44,13 @@ int store_init()
 			strcpy(store_dbs->name, "");
 			store_dbs->col = NULL;
 			store_dbs->next = NULL;
-		}
 
-		// here we should ideally keep a daemon running and
-		// check that our memory-values are the same as our
-		// disk values
+			// *** SYNC WITH FILESYSTEM ***
+
+			// here we should ideally keep a daemon running and
+			// check that our memory-values are the same as our
+			// disk values
+		}
 	}
 	else
 	{
@@ -83,6 +85,8 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	// faster and let the other process continue writing to disk
 	if((pid = fork()) > 0)
 	{
+		// *** MAKE SURE IT HAS BEEN CREATED BEFORE ***
+
 		// get our memory location (our first root database with root values)
 		// note we only need to do this if we are going to get-set via memory
 		if((shmid = shmget(shm_key, sizeof(struct db), 0660)) == -1)
@@ -461,7 +465,7 @@ int store_halt()
 	// free our memory
 	if(error == ERR_NONE)
 	{
-		printf("freeing memory...");
+		printf("freeing memory...\n");
 	
 		// close our semaphores
 		error = memory_clear();
