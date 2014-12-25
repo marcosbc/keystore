@@ -10,6 +10,7 @@
 #include <fcntl.h> // O_CREAT, ...
 #include "common.h"
 #include "memory.h"
+#include "database.h"
 
 // shared memory:
 //   to get different databases
@@ -32,7 +33,8 @@ int memory_init()
 	{
 		if(sem_mutex == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't create semaphore \"%s\"\n", SEM_MUTEX);
+			fprintf(stderr, "error: couldn't create semaphore \"%s\"\n",
+			        SEM_MUTEX);
 			error = 16;
 		}
 		if(sem_rw == (sem_t *) -1)
@@ -45,60 +47,149 @@ int memory_init()
 	return error;
 }
 
-void *memory_set(void *ent)
+void *memory_set(void *info)
 {
-	int error = 0;
+	int val_len = 0;
 	sem_t *sem_rw = sem_open(SEM_RW, 0);
 	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
+	store_entry *entry = NULL;
+
+	// extract information from our info variable
+	char *key = ((struct entry_inf *) info)->key;
+	char *value = ((struct entry_inf *) info)->value;
+	char *db_name = ((struct entry_inf *) info)->db_name;
+	store_db *dbs = ((struct entry_inf *) info)->dbs;
+	int *error = &(((struct entry_inf *) info)->error);
 
 	// we shouldn't write while reading/writing
 	memory_write_lock(sem_rw, sem_mutex);
+	
+		DEBUG_PRINT("finding db\n");
+	// locate our db and find our entry
+	store_db *db = locate_db(db_name, dbs);
 
-	DEBUG_PRINT("notice: [child, memory] setting in db \"%s\" key \
+		DEBUG_PRINT("db found?\n");
+	// create our db if it doesn't exist
+	if(db == NULL)
+	{
+		DEBUG_PRINT("creating db\n");
+		db = create_db(db_name, &dbs);
+	}
+
+	// error allocating data while creating the db?
+	if(db == NULL)
+	{
+		DEBUG_PRINT("error allocating for db \n");
+		*error = ERR_ALLOC;
+	}
+	else
+	{
+		DEBUG_PRINT("finding entry\n");
+
+		entry = locate_entry(key, db);
+		DEBUG_PRINT("entry found?\n");
+
+		// did we find an entry?
+		if(entry != NULL)
+		{
+		DEBUG_PRINT("yes, free val\n");
+			// just replace the value
+			free_data(&entry->val);
+		}
+		// if we didn't, create a new one
+		else
+		{
+		DEBUG_PRINT("no, creat\n");
+			entry = create_entry(key, &db);
+		DEBUG_PRINT("created\n");
+	
+			if(entry == NULL)
+			{
+				*error = ERR_ALLOC;
+			}
+			else
+			{
+				entry->val = (char *) store_data(val_len * sizeof(char));
+				
+				if(entry->val == NULL)
+				{
+					*error = ERR_ALLOC;
+				}
+			}
+		}
+		DEBUG_PRINT("have entry now, adding value\n");
+
+		// add the value if memory was allocated correctly
+		if(*error == ERR_NONE)
+		{
+			val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
+			strncpy(entry->val, value, val_len);
+			entry->val[val_len - 1] = '\0';
+		}
+
+		DEBUG_PRINT("notice: [child, memory] setting in db \"%s\" key \
 \"%s\", value \"%s\"\n",
-	            ((store_entry *) ent)->db,
-				((store_entry *) ent)->key,
-				((store_entry *) ent)->val);
-
-	// set the value in the db
+		            db_name, key, value);
 		
+	}
+	
 	// done!
 	memory_write_unlock(sem_rw);
 
-	pthread_exit(&error);
+	DEBUG_PRINT("returning thread error %d\n", *error);
+	pthread_exit(NULL);
 }
 
-void *memory_get(void *ent)
+void *memory_get(void *info)
 {
-	int error = 0;
 	sem_t *sem_rw = sem_open(SEM_RW, 0);
 	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
+	store_entry *ent = NULL;
 
-	if(sem_rw != (sem_t *) -1 && sem_mutex != (sem_t *) -1)
+	// extract information from our info variable
+	char *key = (char *) ((struct entry_inf *) info)->key;
+	char *value = (char *) ((struct entry_inf *) info)->value;
+	char *db_name = (char *) ((struct entry_inf *) info)->db_name;
+	store_db *dbs = (store_db *) ((struct entry_inf *) info)->dbs;
+	store_db *db = NULL;
+	int *error = &(((struct entry_inf *) info)->error);
+
+	if(sem_rw == (sem_t *) -1 || sem_mutex == (sem_t *) -1)
 	{
 		// we have a limit of max readers at once
 		memory_read_lock(sem_rw);
 
-		DEBUG_PRINT("notice: [child, memory] getting from db \"%s\" key \
+		// locate our db and find our entry
+		if(NULL == (db = locate_db(db_name, dbs)))
+		{
+			*error = ERR_DB;
+		}
+		else if(NULL == (ent = locate_entry(key, db)))
+		{
+			*error = ERR_ENTRY;
+		}
+		else
+		{
+			DEBUG_PRINT("notice: [child, memory] getting from db \"%s\" key \
 \"%s\"\n",
-		            ((store_entry *) ent)->db,
-		    		((store_entry *) ent)->key);
+			            db->name,
+			    		((store_entry *) ent)->key);
 
-		// get the value from the db
-		strcpy(((store_entry *) ent)->val, "TEST");
+			// get the value from the db
+			// write semaphore not needed because the entry_info is not shared
+			strcpy(value, ent->val);
+
+			DEBUG_PRINT("notice: [child, memory] got value \"%s\" for key \
+\"%s\" in db \"%s\"\n",
+			            value, key, db_name);
+		}
 
 		// reading done!
 		memory_read_unlock(sem_rw);
-
-		DEBUG_PRINT("notice: [child, memory] got value \"%s\" for key \
-\"%s\" in db \"%s\"\n",
-		            ((store_entry *) ent)->val,
-		    		((store_entry *) ent)->key,
-		    		((store_entry *) ent)->db);
 	}
 	else
 	{
-		error = ERR_MEM_SEMOPEN;
+		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
 			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
@@ -112,7 +203,8 @@ void *memory_get(void *ent)
 		}
 	}
 
-	pthread_exit(&error);
+	DEBUG_PRINT("returning thread error %d\n", *error);
+	pthread_exit(NULL);
 }
 
 int memory_clear()

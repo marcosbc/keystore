@@ -10,8 +10,8 @@
 #include <semaphore.h>
 
 int memory_init();
-void *memory_set(void *ent);
-void *memory_get(void *ent);
+void *memory_set(void *info);
+void *memory_get(void *info);
 int memory_clear();
 void memory_read_lock(sem_t *sem);
 void memory_read_unlock(sem_t *sem);

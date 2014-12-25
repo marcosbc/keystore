@@ -27,8 +27,8 @@
 #define ERR_USE_MSG "use: ./keystore [set KEY VALUE|get KEY] DB1[ DB2[ ...]]"
 #define ERR_FORK 2
 #define ERR_FORK_MSG "fork returned a number less than zero"
-#define ERR_CALLOC 5
-#define ERR_CALLOC_MSG "calloc() returned NULL"
+#define ERR_ALLOC 5
+#define ERR_ALLOC_MSG "memory allocation returned NULL"
 #define ERR_STORE_SHMCREATE 10
 #define ERR_STORE_SHMCREATE_MSG "couldn't create shared memory"
 #define ERR_STORE_SHMLOAD 11
@@ -46,7 +46,11 @@
 #define ERR_THR 20
 #define ERR_THR_MSG ""
 #define ERR_THRJOIN 21
-#define ERR_THRJOIN_MSG ""
+#define ERR_THRJOIN_MSG "error in thread join"
+#define ERR_DB 30
+#define ERR_DB_MSG "db not found"
+#define ERR_ENTRY 31
+#define ERR_ENTRY_MSG "entry not found"
 
 #define MAX_PATH_SIZE	1024
 #define MAX_DB_SIZE		16
@@ -67,29 +71,29 @@
 typedef struct entry {
 	char key[MAX_KEY_SIZE];
 	char *val; // we don't want to have a maximum-value size
-	char db[MAX_DB_SIZE];
 	struct entry *next;
 } store_entry;
-
-// dictionary type
-// why tree? -> first_dic:second_dic:third_dic:entry
-typedef struct collection {
-	char name[MAX_DICT_SIZE];
-	struct entry *ent;
-	struct collection *next; // in chronological order
-	struct collection *children;
-	struct collection *brother;
-} store_collection;
 
 // why not double-linked list? because the first one is created in
 // shared memory, and there should be a theorical limit of number of dbs
 typedef struct db {
 	char name[MAX_DB_SIZE];
-	struct collection *col;
 	struct db *next;
+	struct entry *ent;
 } store_db;
 
-int extract_collection(char collection[MAX_KEY_SIZE], char key[MAX_KEY_SIZE]);
+// for get and set operations
+struct entry_inf {
+	char *key; // key/path to the name for the entry
+	char *value; // key/path to the name for the entry
+	struct entry *entry;
+	char *db_name;
+	struct db *dbs;
+	int error;
+};
+
+void *store_data(size_t bytes);
+void free_data(void *p);
 void print_error_case(int error);
 void print_error(char *msg);
 int max(int x, int y);

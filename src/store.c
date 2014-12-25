@@ -14,6 +14,7 @@
 #include "store.h"
 #include "memory.h"
 #include "disk.h"
+#include "database.h"
 
 int store_init()
 {
@@ -42,7 +43,6 @@ int store_init()
 		{
 			// our root db always has an empty name
 			strcpy(store_dbs->name, "");
-			store_dbs->col = NULL;
 			store_dbs->next = NULL;
 
 			// *** SYNC WITH FILESYSTEM ***
@@ -63,15 +63,15 @@ int store_init()
 int store_set(char key[], char value[], int num_dbs, char *dbs[])
 {
 	int error = 0;
-	int i;
+	int i = 0;
 	pid_t pid;
 	int therr = 0;
-	store_entry *entries = NULL;
+	store_entry **entries = NULL;
 	pthread_t *thids = NULL;
+	struct entry_inf *inf = NULL;
 	FILE **fids = NULL;
-	int shmid;
+	int shmid = 0;
 	store_db *store_dbs = NULL;
-	size_t val_len = 0;
 	key_t shm_key = ftok(".", KEY_ID);
 
 	DEBUG_PRINT("notice: supplied key \"%s\", value \"%s\", num_dbs %d\n",
@@ -85,8 +85,6 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	// faster and let the other process continue writing to disk
 	if((pid = fork()) > 0)
 	{
-		// *** MAKE SURE IT HAS BEEN CREATED BEFORE ***
-
 		// get our memory location (our first root database with root values)
 		// note we only need to do this if we are going to get-set via memory
 		if((shmid = shmget(shm_key, sizeof(struct db), 0660)) == -1)
@@ -110,105 +108,89 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 
 		if(error == ERR_NONE)
 		{
-			// create our thread entries and store entries
-			// ??????????
 			thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
-			entries = (store_entry *) calloc(num_dbs, sizeof(store_entry));
+			entries = (store_entry **) calloc(num_dbs, sizeof(store_entry *));
+			inf = (struct entry_inf *) calloc(num_dbs, sizeof(struct entry_inf));
 	
-			if(thids != NULL && entries != NULL)
+			if(thids != NULL && entries != NULL && inf != NULL)
 			{
-				// children - alter the database in memory
-				for(i = 0; i < num_dbs && ! therr && error == ERR_NONE; i++)
+				DEBUG_PRINT("alloc ok \n");
+
+				// parent - alter the database in memory
+				for(; i < num_dbs && ! therr && error == ERR_NONE; i++)
 				{
-					// set up our entry
-					strcpy(entries[i].key, key);
-					strcpy(entries[i].db, dbs[i]);
+				DEBUG_PRINT("for#%d \n", i);
+					// create the entry information for setting
+					inf[i].key = key;
+					inf[i].value = value;
+					inf[i].entry = entries[i];
+					inf[i].db_name = dbs[i];
+					inf[i].dbs = store_dbs;
+					inf[i].error = 0;
+				DEBUG_PRINT("values set, creating thread \n");
 					
-					// copy the value
-					val_len = (size_t) min((int) strlen(value), MAX_VAL_SIZE);
-					entries[i].val = (char *) calloc(val_len, sizeof(char));
-					
-					if(entries[i].val != NULL)
+					// create our thread
+					therr = pthread_create(&thids[i], NULL, memory_set,
+					                       &inf[i]);
+				DEBUG_PRINT("thread created \n");
+	
+					DEBUG_PRINT("notice: [parent] thread#%d %d (\"%s\" => \
+\"%s\") to insert in db \"%s\"\n",
+					            i, (int) thids[i], key, value, inf[i].db_name);
+
+					if(therr != ERR_NONE) 
 					{
-						strncpy(entries[i].val, value, val_len);
-
-						DEBUG_PRINT("notice: store_entry variable: key=\"%s\" \
-value=\"%s\" db=\"%s\"\n",
-						            entries[i].key, entries[i].val, entries[i].db);
-				
-						// create our thread
-						therr = pthread_create(&thids[i], NULL, memory_set,
-						                       &entries[i]);
-				
-						DEBUG_PRINT("notice: [child] thread#%d %d to insert in db \
-\"%s\"\n",
-						            i, (int) thids[i], dbs[i]);
-
-						if(therr != 0)
-						{
-							error = ERR_THR;
-						}
-					}
-
-					else
-					{
-						error = ERR_CALLOC;
+						error = ERR_THR;
 					}
 				}
+			}
 
-				// set the number of iterations that went correctly
-				num_dbs = i;
-				therr = 0;
+			// set the number of iterations that went correctly
+			num_dbs = i;
+			therr = 0;
 			
-				// now, end our threads
-				for(i = 0; i < num_dbs && ! therr && error == ERR_NONE; i++)
+			// now, end our threads
+			for(i = 0; i < num_dbs && therr == ERR_NONE && error == ERR_NONE; i++)
+			{
+				DEBUG_PRINT("notice: [parent] ending thread#parent-%d %d...\n",
+				            i, (int) thids[i]);
+				
+				therr = pthread_join(thids[i], (void **) &error);
+
+				if(therr != 0)
 				{
-					DEBUG_PRINT("notice: [child] ending thread#child-%d %d...\n",
-					            i, (int) thids[i]);
-					
-					therr = pthread_join(thids[i], NULL);
-
-					if(therr != 0)
-					{
-						error = ERR_THRJOIN;
-					}
-					else
-					{
-						DEBUG_PRINT("notice: [child] ended thread#child-%d %d\n",
-					                i, (int) thids[i]);
-					}
+					error = ERR_THRJOIN;
 				}
-
-				// unmap our shared memory
-				if(-1 == shmdt(store_dbs))
+				else
 				{
-					error = ERR_STORE_SHMDT;
+					error = inf[i].error;
+					DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d\
+returned value %d\n",
+				                i, (int) thids[i], inf[i].error);
 				}
-			}
-			else
-			{
-				error = ERR_CALLOC;
-			}
-
-			if(thids != NULL)
-			{
-				free(thids);
-			}
-
-			if(entries != NULL)
-			{
-				free(entries);
 			}
 		}
+
+		// unmap our shared memory
+		if(error != ERR_STORE_SHMLOAD && -1 == shmdt(store_dbs))
+		{
+			error = ERR_STORE_SHMDT;
+		}
+
+		free(inf);
+		free(thids);
+		free(entries);
 	}
 	else if(pid == 0)
 	{
 		// create our thread entries and store entries
+		inf = (struct entry_inf *) calloc(num_dbs, sizeof(struct entry_inf));
 		thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
-		entries = (store_entry *) calloc(num_dbs, sizeof(store_entry));
+		entries = (store_entry **) calloc(num_dbs, sizeof(store_entry *));
 		fids = (FILE **) calloc(num_dbs, sizeof(FILE *));
+	
 
-		if(fids != NULL && entries != NULL && thids != NULL)
+		/* if(fids != NULL && entries != NULL && thids != NULL)
 		{
 			// parent - alter the database in disk
 			for(i = 0; i < num_dbs && ! therr && error == ERR_NONE; i++)
@@ -226,17 +208,15 @@ value=\"%s\" db=\"%s\"\n",
 				{
 					strncpy(entries[i].val, value, val_len);
 
-					DEBUG_PRINT("notice: store_entry variable: key=\"%s\" \
-value=\"%s\" db=\"%s\"\n",
-					            entries[i].key, entries[i].val, entries[i].db);
-	
 					// create our thread
 					therr = pthread_create(&thids[i], NULL, disk_set, &entries[i]);
 				
-					DEBUG_PRINT("notice: [parent] thread#%d %d to insert in db \
-\"%s\"\n",
-					            i, (int) thids[i], dbs[i]);
-				
+					DEBUG_PRINT("notice: [child] thread#%d %d (\"%s\" => \
+\"%s\") to insert in db \"%s\"\n",
+					            i, (int) thids[i],
+								entries[i].key, entries[i].val, entries[i].db);
+	
+			
 					if(therr != 0)
 					{
 						error = ERR_THR;
@@ -244,7 +224,7 @@ value=\"%s\" db=\"%s\"\n",
 				}
 				else
 				{
-					error = ERR_CALLOC;
+					error = ERR_ALLOC;
 				}
 			}
 
@@ -255,7 +235,7 @@ value=\"%s\" db=\"%s\"\n",
 			// now, end our threads
 			for(i = 0; i < num_dbs && ! therr && error == ERR_NONE; i++)
 			{
-				DEBUG_PRINT("notice: [parent] ending thread#parent-%d %d...\n",
+				DEBUG_PRINT("notice: [child] ending thread#child-%d %d...\n",
 				            i, (int) thids[i]);
 				
 				therr = pthread_join(thids[i], NULL);
@@ -266,7 +246,7 @@ value=\"%s\" db=\"%s\"\n",
 				}
 				else
 				{
-					DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d\n",
+					DEBUG_PRINT("notice: [child] ended thread#child-%d %d\n",
 					            i, (int) thids[i]);
 				}
 
@@ -275,23 +255,13 @@ value=\"%s\" db=\"%s\"\n",
 		}
 		else
 		{
-			error = ERR_CALLOC;
-		}
+			error = ERR_ALLOC;
+		} */
 
-		if(thids != NULL)
-		{
-			free(thids);
-		}
-
-		if(entries != NULL)
-		{
-			free(entries);
-		}
-
-		if(fids != NULL)
-		{
-			free(fids);
-		}
+		free(inf);
+		free(thids);
+		free(entries);
+		free(fids);
 	}
 	else
 	{
@@ -305,14 +275,14 @@ int store_get(char key[], int num_dbs, char *dbs[])
 {
 	int error = 0;
 	int i;
-	char value[MAX_VAL_SIZE] = "";
 	int therr = 0;
 	store_db *store_dbs = NULL;
-	store_entry *entries = NULL;
+	store_entry **entries = NULL;
 	pthread_t *thids = NULL;
-	size_t val_len;
+	struct entry_inf *inf = NULL;
 	int shmid;
 	key_t shm_key = ftok(".", KEY_ID);
+	int *th_return_err = NULL;
 
 	DEBUG_PRINT("notice: supplied key \"%s\", num_dbs %d\n",
 	            key, num_dbs);
@@ -345,44 +315,33 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	if(error == ERR_NONE)
 	{
 		// create our thread entries
-		thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
-		entries = (store_entry *) calloc(num_dbs, sizeof(store_entry));
+		thids = (pthread_t *) calloc(num_dbs,
+		                                 sizeof(pthread_t));
+		entries = (store_entry **) calloc(num_dbs, sizeof(store_entry *));
+		inf = (struct entry_inf *) calloc(num_dbs, sizeof(struct entry_inf));
 
-		if(thids != NULL && entries != NULL)
+		if(thids != NULL && entries != NULL && inf != NULL)
 		{
-			for(i = 0; i < num_dbs; i++)
+			for(i = 0; i < num_dbs && ! therr && error == ERR_NONE; i++)
 			{
-				strcpy(entries[i].key, key);
-				strcpy(entries[i].db, dbs[i]);
+				// create our entry information
+				inf[i].key = key;
+				inf[i].entry = entries[i];
+				inf[i].db_name = dbs[i];
+				inf[i].dbs = store_dbs;
+				inf[i].error = error;
 
-				// copy the value
-				val_len = (size_t) min((int) strlen(value), MAX_VAL_SIZE);
-				entries[i].val = (char *) calloc(val_len, sizeof(char));
-						
-				if(entries[i].val != NULL)
+				// create our thread
+				therr = pthread_create(&thids[i], NULL, memory_get,
+				                       &inf[i]);
+	
+				DEBUG_PRINT("notice: thread#%d %d (key \"%s\" \
+ to search in db \"%s\"\n",
+				            i, (int) thids[i], key, inf[i].db_name);
+
+				if(therr != 0)
 				{
-					strncpy(entries[i].val, value, val_len);
-	
-					DEBUG_PRINT("notice: store_entry variable: key=\"%s\" \
-value=\"%s\" db=\"%s\"\n",
-					            entries[i].key, entries[i].val, entries[i].db);
-	
-					DEBUG_PRINT("notice: [child] thread#%d %d to search in db \
-\"%s\"\n",
-					            i, (int) thids[i], dbs[i]);
-	
-					// create our thread
-					therr = pthread_create(&thids[i], NULL, memory_get,
-					                       &entries[i]);
-	
-					if(therr != 0)
-					{
-						error = ERR_THR;
-					}
-				}
-				else
-				{
-					error = ERR_CALLOC;
+					error = ERR_THR;
 				}
 			}
 	
@@ -390,22 +349,24 @@ value=\"%s\" db=\"%s\"\n",
 			num_dbs = i;
 
 			// end our threads
-			for(i = 0; i < num_dbs; i++)
+			for(i = 0; i < num_dbs && error == ERR_NONE; i++)
 			{
-				DEBUG_PRINT("notice: [child] ending thread#%d %d...\n",
+				DEBUG_PRINT("notice: ending thread#%d %d...\n",
 				            i, (int) thids[i]);
 	
-				therr = pthread_join(thids[i], NULL);
+				therr = pthread_join(thids[i], (void **) &th_return_err);
 	
 				if(therr != 0)
 				{
+					DEBUG_PRINT("thread ended, error %d\n", therr);
 					error = ERR_THRJOIN;
 				}
-					
 				else
 				{
-					DEBUG_PRINT("notice: [child] ended thread#%d %d\n",
-					            i, (int) thids[i]);
+					error = inf[i].error;
+					DEBUG_PRINT("notice: ended thread#%d %d, \
+returned %d\n",
+					            i, (int) thids[i], error);
 				}
 			}
 
@@ -417,19 +378,13 @@ value=\"%s\" db=\"%s\"\n",
 		}
 		else
 		{
-			error = ERR_CALLOC;
+			error = ERR_ALLOC;
 		}
 	}
 
-	if(thids != NULL)
-	{
-		free(thids);
-	}
-
-	if(entries != NULL)
-	{
-		free(entries);
-	}
+	free(thids);
+	free(inf);
+	free(entries);
 
 	return error;
 }
@@ -466,7 +421,12 @@ int store_halt()
 	if(error == ERR_NONE)
 	{
 		printf("freeing memory...\n");
-	
+
+		// sem_wait()
+		// free entries[i].val, entries and dbs
+		// -> call mem_clean() ???
+		// sem_post()
+
 		// close our semaphores
 		error = memory_clear();
 	}
@@ -499,7 +459,14 @@ void print_existing_databases(store_db *store_dbs)
     printf("\nlist of databases:\n------------------\n");
     while(store_dbs != NULL)
     {
-        printf("database#%d: %s\n", i, store_dbs->name);
+		if(store_dbs->name != NULL)
+		{
+			printf("database#%d: %s\n", i, store_dbs->name);
+		}
+		else
+		{
+			printf("database#%d (unnamed)\n", i);
+		}
 		i++;
 		store_dbs = store_dbs->next;
     }
