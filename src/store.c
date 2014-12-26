@@ -23,7 +23,8 @@
 int stop_daemon = 0; // used/modified by this process
 store_info *store; // used/modified by this process
 struct current_entry_info current; // modified by store_set/_get/_halt process
-int fifo_pipe;
+int fifo_pipe = -1;
+int fifo_pipe_ack = -1;
 int error = 0;
 
 void store_write(struct current_entry_info *info)
@@ -32,7 +33,6 @@ void store_write(struct current_entry_info *info)
 	int i = 0;
 	pid_t pid;
 	int therr = 0;
-	store_entry **entries = NULL;
 	pthread_t *thids = NULL;
 	struct entry_inf *ent_inf = NULL;
 	// FILE **fids = NULL;
@@ -42,34 +42,53 @@ void store_write(struct current_entry_info *info)
 
 	// the parent process modifies the memory so we can print our results
 	// faster and let the other process continue writing to disk
-	if((pid = fork()) > 0)
+	if(1) //(pid = fork()) > 0)
 	{
 		thids = (pthread_t *) calloc(info->num_dbs, sizeof(pthread_t));
 		ent_inf = (struct entry_inf *) calloc(info->num_dbs,
 		                                      sizeof(struct entry_inf));
-	
-		if(thids != NULL && entries != NULL && ent_inf != NULL)
+		if(thids == NULL || ent_inf == NULL)
+		{
+			err = ERR_ALLOC;
+		}
+		else if(-1 == mkfifo(STORE_PIPE_ACK, 0666))
+		{
+			error = ERR_FIFO_CREATE;
+			perror("mkfifo");
+		}
+		else if(-1 == (fifo_pipe_ack = open(STORE_PIPE_ACK, O_WRONLY | O_NONBLOCK)))
+		{
+			error = ERR_FIFO_OPEN;
+			perror("open");
+		}
+		else
 		{
 			DEBUG_PRINT("alloc ok \n");
 
 			// parent - alter the database in memory
 			for(; i < info->num_dbs && ! therr && err == ERR_NONE; i++)
 			{
+				DEBUG_PRINT("adding values \n");
 				// create the entry information for setting
 				ent_inf[i].key = info->key;
 				ent_inf[i].value = info->val;
-				ent_inf[i].db_name = info->dbs[i];
+				ent_inf[i].db_name = info->dbs + i * MAX_DB_SIZE;
 				ent_inf[i].entry = NULL;
 				ent_inf[i].dbs = store->dbs;
 				ent_inf[i].error = 0;
+				DEBUG_PRINT("values ok \n");
 				
 				// create our thread
 				therr = pthread_create(&thids[i], NULL, memory_set,
 				                       &ent_inf[i]);
 
+				printf("print test, %p\n", info->val);
+				printf("print test, %p\n", ent_inf[i].db_name);
+
+				// CHECK ->VAL, it's null probably
 				DEBUG_PRINT("notice: [parent] thread#%d %d (\"%s\" => \
 \"%s\") to insert in db \"%s\"\n",
-				            i, (int) thids[i], info->key, info->val,
+				            i, (int) thids[i], info->key, "",//info->val,
 							ent_inf[i].db_name);
 
 				if(therr != ERR_NONE) 
@@ -135,31 +154,51 @@ void store_read(struct current_entry_info *info)
 
 	DEBUG_PRINT("notice: supplied key \"%s\", num_dbs %d\n",
 	            info->key, info->num_dbs);
-
+	
 	// create our thread entries
 	thids = (pthread_t *) calloc(info->num_dbs,
 	                             sizeof(pthread_t));
 	ent_inf = (struct entry_inf *) calloc(info->num_dbs,
-		                                      sizeof(struct entry_inf));
-
-	if(thids != NULL && ent_inf != NULL)
+	                                      sizeof(struct entry_inf));
+	
+	if(thids == NULL || ent_inf == NULL)
+	{
+		err = ERR_ALLOC;
+	}
+	else if(-1 == mkfifo(STORE_PIPE_ACK, 0666))
+	{
+		error = ERR_FIFO_CREATE;
+		perror("mkfifo");
+	}
+	else if(-1 == (fifo_pipe_ack = open(STORE_PIPE_ACK, O_WRONLY | O_NONBLOCK)))
+	{
+		error = ERR_FIFO_OPEN;
+		perror("open");
+	}
+	else
 	{
 		DEBUG_PRINT("alloc ok\n");
 
 		for(i = 0; i < info->num_dbs && ! therr && err == ERR_NONE; i++)
 		{
+			DEBUG_PRINT("adding values \n");
 			// create the entry information for setting
 			ent_inf[i].key = info->key;
 			ent_inf[i].value = info->val;
-			ent_inf[i].db_name = info->dbs[i];
+			ent_inf[i].db_name = info->dbs + i * MAX_DB_SIZE;
 			ent_inf[i].entry = NULL;
 			ent_inf[i].dbs = store->dbs;
 			ent_inf[i].error = 0;
+			DEBUG_PRINT("values ok \n");
 
-			// create our thread
+			// create our thread -> ERROR???
 			therr = pthread_create(&thids[i], NULL, memory_get,
 			                       &ent_inf[i]);
-	
+
+				printf("print test, %p\n", info->val);
+				printf("print test, %s\n", ent_inf[i].db_name);
+
+			// check info->val, it's null probably
 			DEBUG_PRINT("notice: thread#%d %d (key \"%s\" \
  to search in db \"%s\"\n",
 			            i, (int) thids[i], info->key, ent_inf[i].db_name);
@@ -202,10 +241,6 @@ returned %d\n",
 			err = ERR_STORE_SHMDT;
 		}
 	}
-	else
-	{
-		err = ERR_ALLOC;
-	}
 
 	free(thids);
 	free(ent_inf);
@@ -214,34 +249,58 @@ returned %d\n",
 void store_decide()
 {
 	struct current_entry_info current;
+	char mode;
+	int i; // DEBUG
 
 	DEBUG_PRINT("entering store_decide()\n");
 
 	// get the current_entry_info variable
 	// read the length
-	read(fifo_pipe, &current.mode, sizeof(char));
-	
+	read(fifo_pipe, &mode, sizeof(char));
+	current.mode = mode;
+
 	// read the struct
 	if(current.mode == STORE_PIPE_MODE_SET || current.mode == STORE_PIPE_MODE_GET)
 	{
+		DEBUG_PRINT("deciding mode, between set and get\n");
+
 		// read data
 		read(fifo_pipe, current.key, MAX_KEY_SIZE * sizeof(char));
 		read(fifo_pipe, &current.num_dbs, sizeof(int));
 		read(fifo_pipe, current.dbs, current.num_dbs * MAX_DB_SIZE * sizeof(char));
 
+		DEBUG_PRINT("db and key read, printing dbs (begins at %p)\n", current.dbs);
+
+		#ifdef __DEBUG__
+		for(i = 0; i < current.num_dbs; i++)
+		{
+			printf("notice: db#%d with pointer %p is \"%s\"\n", i,
+			       current.dbs + i * MAX_DB_SIZE, current.dbs + i * MAX_DB_SIZE);
+		}
+		printf("notice: value is \"%s\"\n", current.val);
+		#endif
+
+		DEBUG_PRINT("common data read\n");
+		
 		// make the data persist in disk
 
 		if(current.mode == STORE_PIPE_MODE_SET)
 		{
+			DEBUG_PRINT("reading additional data\n");
+
 			read(fifo_pipe, &current.val_length, sizeof(size_t));
 			read(fifo_pipe, current.val, current.val_length);
 
 			DEBUG_PRINT("mode: setting value\n");
 
-			// set mode
+			// set mode // ** CHECK BUG **
 			store_write(&current); // will modify error variable
 
+			// write ack message
+			write(fifo_pipe_ack, STORE_PIPE_ACK_MSG, STORE_PIPE_ACK_MSG_LEN);
+
 			// write(entry location)
+			// read(ok)
 		}
 		else if(current.mode == STORE_PIPE_MODE_GET)
 		{
@@ -250,7 +309,11 @@ void store_decide()
 			// get mode
 			store_read(&current); // will modify error variable
 
+			// write ack message
+			write(fifo_pipe_ack, STORE_PIPE_ACK_MSG, STORE_PIPE_ACK_MSG_LEN);
+			
 			// write(entry location)
+			// read(ok)
 		}
 	}
 	else
@@ -307,10 +370,12 @@ int store_init()
 	else if(-1 == mkfifo(STORE_PIPE, 0666))
 	{
 		error = ERR_FIFO_CREATE;
+		perror("mkfifo");
 	}
 	else if(-1 == (fifo_pipe = open(STORE_PIPE, O_RDONLY | O_NONBLOCK)))
 	{
 		error = ERR_FIFO_OPEN;
+		perror("open");
 	}
 	else
 	{
@@ -367,11 +432,15 @@ int store_init()
 			// check that our memory-values are the same as our
 			// disk values
 		}
+	}
 
+	if(-1 != fifo_pipe)
+	{
 		// close and unlink our pipe
 		close(fifo_pipe);
-		unlink(STORE_PIPE);
 	}
+
+	unlink(STORE_PIPE);
 
 	// now that we're done, remove the shared memory
 	if(-1 == shmctl(shmid, IPC_RMID, NULL))
@@ -391,7 +460,11 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	int val_len = strlen(value);
 	int shmid = 0;
 	key_t shm_key = ftok(".", KEY_ID);
-	
+	char *dbs_corrected = NULL;
+	char *key_corrected = NULL;
+	int i;
+	char *ok_msg = NULL;
+
 	#ifdef __DEBUG__
 	print_databases(num_dbs, dbs);
 	#endif
@@ -407,9 +480,21 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 		error = ERR_STORE_SHMAT;
 	}
 	// open our pipe
-	else if(-1 == (fifo_pipe = open(STORE_PIPE, O_WRONLY | O_NONBLOCK)))
+	else if(-1 == (fifo_pipe = open(STORE_PIPE, O_WRONLY | O_NONBLOCK)) ||
+	        -1 == (fifo_pipe_ack = open(STORE_PIPE_ACK, O_RDONLY | O_NONBLOCK)))
 	{
 		error = ERR_FIFO_OPEN;
+	}
+	else if(NULL == (dbs_corrected = (char *) store_data(num_dbs * MAX_DB_SIZE
+	                                                      * sizeof(char))))
+	{
+		error = ERR_ALLOC;
+	}
+	// alloc once at a time...
+	else if(NULL == (key_corrected = (char *) store_data(strlen(key)
+	                                                     * sizeof(char))))
+	{
+		error = ERR_ALLOC;
 	}
 	else
 	{
@@ -418,21 +503,51 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 		#endif
 
 		// correct key and dbs variable's size
+		strncpy(key_corrected, key, MAX_KEY_SIZE - 1);
+		key_corrected[MAX_VAL_SIZE - 1] = '\0';
+		for(i = 0; i < num_dbs; i++)
+		{
+			strncpy(dbs_corrected + i * MAX_DB_SIZE, dbs[i], MAX_DB_SIZE - 1);
+			*(dbs_corrected + (i + 1) * MAX_DB_SIZE - 1) = '\0';
+		}
 
 		// send the signal to our process, and then send the data
 		kill(store->pid, SIGUSR1);
 		write(fifo_pipe, &mode, sizeof(char));
 		write(fifo_pipe, key, MAX_KEY_SIZE * sizeof(char));
 		write(fifo_pipe, &num_dbs, sizeof(int));
-		write(fifo_pipe, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
+		write(fifo_pipe, *dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
 		write(fifo_pipe, &val_len, sizeof(int));
 		write(fifo_pipe, value, val_len * sizeof(char));
+		
+		DEBUG_PRINT("writing to pipe finished, reading ok/ack msg\n");
+		
+		// read the ok/ack message
+		read(fifo_pipe_ack, STORE_PIPE_ACK_MSG, STORE_PIPE_ACK_MSG_LEN);
 
-		// read entry location
+		// if ok == MSG
 
-		// close our pipe
+		DEBUG_PRINT("ok msg received: \"%s\"\n", ok_msg);
+
+		// read entry location (which is persistent)
+	}
+
+	if(-1 != fifo_pipe)
+	{
+		// close and unlink our pipe
 		close(fifo_pipe);
 	}
+
+	if(-1 != fifo_pipe_ack)
+	{
+		// close and unlink our pipe
+		close(fifo_pipe_ack);
+	}
+
+	unlink(STORE_PIPE_ACK);
+
+	free(dbs_corrected);
+	free(key_corrected);
 
 	return error;
 }
@@ -442,6 +557,10 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	char mode = STORE_PIPE_MODE_GET;
 	int shmid;
 	key_t shm_key = ftok(".", KEY_ID);
+	char *dbs_corrected = NULL;
+	char *key_corrected = NULL;
+	int i;
+	char *ok_msg = NULL;
 	
 	#ifdef __DEBUG__
 	print_databases(num_dbs, dbs);
@@ -458,13 +577,25 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		error = ERR_STORE_SHMAT;
 	}
 	// open our pipe
-	else if(-1 == (fifo_pipe = open(STORE_PIPE, O_WRONLY | O_NONBLOCK)))
+	else if(-1 == (fifo_pipe = open(STORE_PIPE, O_WRONLY | O_NONBLOCK)) ||
+	        -1 == (fifo_pipe_ack = open(STORE_PIPE_ACK, O_RDONLY | O_NONBLOCK)))
 	{
 		error = ERR_FIFO_OPEN;
 	}
 	else if(store->pid <= (int) 0)
 	{
 		error = ERR_PID_NUM;
+	}
+	else if(NULL == (dbs_corrected = (char *) store_data(num_dbs * MAX_DB_SIZE
+	                                                      * sizeof(char))))
+	{
+		error = ERR_ALLOC;
+	}
+	// alloc once at a time...
+	else if(NULL == (key_corrected = (char *) store_data(strlen(key)
+	                                                     * sizeof(char))))
+	{
+		error = ERR_ALLOC;
 	}
 	else
 	{
@@ -473,20 +604,57 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		#endif
 
 		// correct key and dbs variable's size
+		strncpy(key_corrected, key, MAX_KEY_SIZE - 1);
+		key_corrected[MAX_VAL_SIZE - 1] = '\0';
+
+		// we will be using single pointers instead of tables to copy db
+		for(i = 0; i < num_dbs; i++)
+		{
+			strncpy(dbs_corrected + i * MAX_DB_SIZE, dbs[i], MAX_DB_SIZE - 1);
+			*(dbs_corrected + (i + 1) * MAX_DB_SIZE - 1) = '\0';
+			DEBUG_PRINT("got db \"%s\"\n", dbs_corrected + i * MAX_DB_SIZE);
+		}
+
+		DEBUG_PRINT("writing to pipe\n");
 
 		// send the signal to our process, and then send the data
 		kill(store->pid, SIGUSR2);
 		write(fifo_pipe, &mode, sizeof(char));
 		write(fifo_pipe, key, MAX_KEY_SIZE * sizeof(char));
 		write(fifo_pipe, &num_dbs, sizeof(int));
-		write(fifo_pipe, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
+		write(fifo_pipe, dbs_corrected, num_dbs * MAX_DB_SIZE * sizeof(char));
 
-		// read entry location
+		DEBUG_PRINT("writing to pipe finished, reading ok/ack msg\n");
+		
+		// read the ok/ack message
+		read(fifo_pipe_ack, ok_msg, STORE_PIPE_ACK_MSG_LEN);
+	
+		// if ok == MSG
 
-		// close our pipe
+		DEBUG_PRINT("ok msg received: \"%s\"\n", ok_msg);
+
+		// read entry location (which is persistent)
+
+		DEBUG_PRINT("pipe closed\n");
+	}
+
+	if(-1 != fifo_pipe)
+	{
+		// close and unlink our pipe
 		close(fifo_pipe);
 	}
 
+	if(-1 != fifo_pipe_ack)
+	{
+		// close and unlink our pipe
+		close(fifo_pipe_ack);
+	}
+
+	unlink(STORE_PIPE_ACK);
+
+	free(dbs_corrected);
+	free(key_corrected);
+	
 	return error;
 }
 
@@ -560,7 +728,7 @@ void print_existing_databases(store_db *store_dbs)
 		i++;
 		store_dbs = store_dbs->next;
     }
-    printf("-----------------\n\n");
+    printf("------------------\n\n");
 
 }
 #endif

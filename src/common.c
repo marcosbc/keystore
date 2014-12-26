@@ -6,6 +6,7 @@ void *store_data(size_t bytes)
 	void *p = NULL;
 
 	DEBUG_PRINT("storing %d bytes\n", (int) bytes);
+	p = malloc(bytes);
 
 	return p;
 }
