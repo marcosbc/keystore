@@ -37,10 +37,10 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	store_info *store = NULL;
 
 	// set sockaddr information values
+	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	strcpy(addr.sun_path, STORE_SOCKET_PATH);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
-	memset(&addr, 0, sizeof(addr));
 
 	#ifdef __DEBUG__
 	print_databases(num_dbs, dbs);
@@ -139,10 +139,10 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	store_info *store = NULL;
 
 	// set sockaddr information values
+	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	strcpy(addr.sun_path, STORE_SOCKET_PATH);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
-	memset(&addr, 0, sizeof(addr));
 
 	#ifdef __DEBUG__
 	print_databases(num_dbs, dbs);
@@ -235,10 +235,10 @@ int store_halt()
 	store_info *store = NULL;
 
 	// set sockaddr information values
+	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	strcpy(addr.sun_path, STORE_SOCKET_PATH);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
-	memset(&addr, 0, sizeof(addr));
 
 	DEBUG_PRINT("notice: database preparing to shut down\n");
 

@@ -262,7 +262,7 @@ int store_server_act(int s, store_info **store)
 			else
 			{
 				read(client_s, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
-				DEBUG_PRINT("got dbs[0] \"%s\" from client\n", dbs[0]);
+				DEBUG_PRINT("got dbs[0] \"%s\" from client\n", dbs);
 
 				// if we're setting a value, we must also read it
 				if(mode == STORE_MODE_SET)
@@ -326,10 +326,10 @@ int store_server_init()
 	int len;
 
 	// set sockaddr information values
+	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	strcpy(addr.sun_path, STORE_SOCKET_PATH);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
-	memset(&addr, 0, sizeof(addr));
 
 	// set up signal to stop server correctly
 	act.sa_handler = store_stop;
@@ -370,17 +370,16 @@ int store_server_init()
 	{
 		error = ERR_SOCKETCREATE;
 	}
-	else if(listen(s, 5) < 0)
-	{
-		perror("listen");
-		fprintf(stderr, "s=%d\n", s);
-		error = ERR_LISTEN;
-	}
 	// bind socket to file
 	else if (bind(s, (struct sockaddr *) &addr, len) < 0)
 	{
 		perror("bind");
 		error = ERR_BIND;
+	}
+	else if(listen(s, 5) < 0)
+	{
+		perror("listen");
+		error = ERR_LISTEN;
 	}
 	else
 	{
