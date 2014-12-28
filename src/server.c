@@ -9,9 +9,11 @@
 #include <sys/shm.h>
 #include <sys/socket.h> // socket related things
 #include <sys/un.h> // socket related things
-#include <pthread.h>
 #include <sys/stat.h> // mkfifo
+#include <sys/times.h>
+#include <time.h>
 #include <unistd.h> // fork
+#include <pthread.h>
 #include <fcntl.h> // O_CREAT, ...
 #include <signal.h>
 #include "common.h"
@@ -63,7 +65,8 @@ store_entry *store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			for(; i < num_dbs && ! therr && err == ERR_NONE; i++)
 			{
 				// create the entry information for setting
-				ent_inf[i].key = key;
+				strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
+				ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
 				ent_inf[i].value = val;
 				ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
 				ent_inf[i].entry = NULL;
@@ -162,7 +165,8 @@ store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 		for(i = 0; i < num_dbs && ! therr && err == ERR_NONE; i++)
 		{
 			// create the entry information for setting
-			ent_inf[i].key = key;
+			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
+			ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
 			ent_inf[i].value = NULL;
 			ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
 			ent_inf[i].entry = NULL;
@@ -225,6 +229,9 @@ returned %d\n",
 
 int store_server_act(int s, store_info **store)
 {
+	long ticks_per_sec = sysconf(_SC_CLK_TCK);
+	struct tms start_tm, end_tm;
+	clock_t t_start, t_end;
 	int error = 0;
 	int client_s = -1; // remote socket
 	struct sockaddr_un client;
@@ -236,21 +243,30 @@ int store_server_act(int s, store_info **store)
 	int val_len = 0; // 32-bit and 64-bit intercompatibility
 	char *val = NULL;
 	store_entry *result = (store_entry *) -1;
-
+	int i = 0;// debug
+	
 	DEBUG_PRINT("waiting for a connection...\n");
 
 	// accept connection (if it fails, it is because server was closed: no error)
 	if(-1 != (client_s = accept(s, (struct sockaddr *) &client, &client_len)))
 	{
+		// init our start time
+		t_start = times(&start_tm);
+
 		// read data
 		read(client_s, &mode, sizeof(char));
+		write(client_s, STORE_ACK, STORE_ACK_LEN);
 		DEBUG_PRINT("got mode \"%c\" from client\n", mode);
 
 		if(mode == STORE_MODE_SET || mode == STORE_MODE_GET)
 		{
+			DEBUG_PRINT("setting or getting mode\n");
 			read(client_s, &key, MAX_VAL_SIZE * sizeof(char));
+			write(client_s, STORE_ACK, STORE_ACK_LEN);
 			DEBUG_PRINT("got key \"%s\" from client\n", key);
-			read(client_s, &num_dbs, sizeof(uint32_t));
+
+			read(client_s, &num_dbs, sizeof(int));
+			write(client_s, STORE_ACK, STORE_ACK_LEN);
 			DEBUG_PRINT("got num_dbs \"%d\" from client\n", num_dbs);
 			
 			dbs = (char *) malloc(num_dbs * MAX_DB_SIZE * sizeof(char));
@@ -262,11 +278,23 @@ int store_server_act(int s, store_info **store)
 			else
 			{
 				read(client_s, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
-				DEBUG_PRINT("got dbs[0] \"%s\" from client\n", dbs);
+				write(client_s, STORE_ACK, STORE_ACK_LEN);
+				for(i = 0; i < num_dbs; i++)
+				{
+					DEBUG_PRINT("got dbs[%d] \"%s\" from client\n", i,
+					            dbs + i*MAX_DB_SIZE);
+				}
 
 				// if we're setting a value, we must also read it
 				if(mode == STORE_MODE_SET)
 				{
+					DEBUG_PRINT("setting mode\n");
+
+					// first, get our val_len
+					read(client_s, &val_len, sizeof(int));
+					write(client_s, STORE_ACK, STORE_ACK_LEN);
+					DEBUG_PRINT("got val_len \"%d\" from client\n", val_len);
+
 					// we don't know how big our value will be
 					// val_len + 1 -> we must allow the \0 to be the last char
 					val = (char *) malloc((val_len + 1) * sizeof(char));
@@ -279,11 +307,13 @@ int store_server_act(int s, store_info **store)
 					else
 					{
 						/** PLEASE LOOK */
+						
+						// ack is not needed here, since we'll return a result
 						/* val_len = */read(client_s, val, val_len * sizeof(char));
 						val[val_len] = '\0'; // ensure we reach end of string
-
 						DEBUG_PRINT("got value \"%s\" from client\n", val);
 
+						DEBUG_PRINT("proceeding to write\n");
 						// now that we have everything, call function for setting
 						result = store_write(key, val, num_dbs, dbs, store);
 					}
@@ -291,6 +321,10 @@ int store_server_act(int s, store_info **store)
 				// 'get' mode
 				else
 				{
+					DEBUG_PRINT("getting mode\n");
+					
+					DEBUG_PRINT("proceeding to read\n");
+					// now that we have everything, call function for setting
 					// now that we have everything, call the function getting
 					result = store_read(key, num_dbs, dbs, *store);
 				}
@@ -308,7 +342,10 @@ int store_server_act(int s, store_info **store)
 		// close connection
 		close(client_s);
 
-		DEBUG_PRINT("connection closed\n");
+		// init our start time
+		t_end = times(&end_tm);
+		printf("connection closed after %7.4f ms\n",
+		       (float) 1000 * (t_end - t_start) / ticks_per_sec);
 	}
 
 	return error;

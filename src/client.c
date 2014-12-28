@@ -35,6 +35,7 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	int len;
 	store_entry *result = NULL;
 	store_info *store = NULL;
+	char ack_buff[STORE_ACK_LEN];
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
@@ -94,12 +95,29 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 		}
 
 		// send the data
+		DEBUG_PRINT("writing mode '%c' to server\n", mode);
 		write(s, &mode, sizeof(char));
-		write(s, key, MAX_KEY_SIZE * sizeof(char));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
+		write(s, key_corrected, MAX_KEY_SIZE * sizeof(char));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
 		write(s, &num_dbs, sizeof(int));
-		write(s, *dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
+		write(s, dbs_corrected, num_dbs * MAX_DB_SIZE * sizeof(char));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing val_len '%d' to server\n", val_len);
 		write(s, &val_len, sizeof(int));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing value '%s' to server\n", value);
 		write(s, value, val_len * sizeof(char));
+		read(s, ack_buff, 4);
 		
 		DEBUG_PRINT("writing finished\n");
 		
@@ -137,6 +155,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	int len;
 	store_entry *result = NULL;
 	store_info *store = NULL;
+	char ack_buff[STORE_ACK_LEN];
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
@@ -198,9 +217,19 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		DEBUG_PRINT("writing to socket\n");
 
 		// send the data
+		DEBUG_PRINT("writing mode '%c' to server\n", mode);
 		write(s, &mode, sizeof(char));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing mode '%s' to server\n", key_corrected);
 		write(s, key, MAX_KEY_SIZE * sizeof(char));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing mode '%d' to server\n", num_dbs);
 		write(s, &num_dbs, sizeof(int));
+		read(s, ack_buff, 4);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
+		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
 		write(s, dbs_corrected, num_dbs * MAX_DB_SIZE * sizeof(char));
 
 		DEBUG_PRINT("writing finished\n");

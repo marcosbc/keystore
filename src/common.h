@@ -85,6 +85,9 @@
 #define STORE_MODE_GET  'g'
 #define STORE_MODE_STOP 'x'
 
+#define STORE_ACK       "ok"
+#define STORE_ACK_LEN   3 // strlen("ok")
+
 // pipe paths
 #define STORE_SOCKET_PATH "keystore_server.sock"
 
@@ -111,7 +114,7 @@ typedef struct info {
 
 // for get and set operations
 struct entry_inf {
-	char *key; // key/path to the name for the entry
+	char key[MAX_KEY_SIZE]; // key/path to the name for the entry
 	char *value; // key/path to the name for the entry
 	struct entry *entry;
 	char *db_name;
