@@ -29,70 +29,67 @@ void store_stop()
 	stop_server = 1;
 }
 
-store_entry *store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
+// TODO: add fork
+store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
                          char *dbs, store_info **store)
 {
 	/** ERRORS **/
 
 	int err = 0;
 	int i = 0;
-	pid_t pid;
+	// pid_t pid;
 	int therr = 0;
 	pthread_t *thids = NULL;
 	struct entry_inf *ent_inf = NULL;
-	store_entry *entry = NULL;
+	store_entry **entries = NULL;
 	// FILE **fids = NULL;
 
 	DEBUG_PRINT("notice: supplied key \"%s\", value \"%s\", num_dbs %d\n",
 	            key, val, num_dbs);
 
-	// the parent process modifies the memory so we can print our results
-	// faster and let the other process continue writing to disk
-	if(1) // if((pid = fork()) > 0) // add mode=parent|children in args
+	if(NULL == (entries = (store_entry **) calloc(num_dbs,
+	                                              sizeof(store_entry *)))
+	|| NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
+	                                                  sizeof(struct entry_inf)))
+	|| NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
 	{
-		thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t));
-		ent_inf = (struct entry_inf *) calloc(num_dbs,
-		                                      sizeof(struct entry_inf));
-		if(thids == NULL || ent_inf == NULL)
-		{
-			err = ERR_ALLOC;
-		}
-		else
-		{
-			DEBUG_PRINT("alloc ok \n");
+		err = ERR_ALLOC;
+	}
+	else
+	{
+		DEBUG_PRINT("alloc ok \n");
 
-			// parent - alter the database in memory
-			for(; i < num_dbs && ! therr && err == ERR_NONE; i++)
-			{
-				DEBUG_PRINT("setting key\n");
-				// create the entry information for setting
-				strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
-				ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
-				DEBUG_PRINT("setting value\n");
-				ent_inf[i].value = val;
-				DEBUG_PRINT("setting dbname\n");
-				ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
-				DEBUG_PRINT("setting entry\n");
-				ent_inf[i].entry = NULL;
-				DEBUG_PRINT("setting store->dbs\n");
-				ent_inf[i].dbs = &((*store)->dbs);
-				DEBUG_PRINT("setting error\n");
-				ent_inf[i].error = 0;
-				DEBUG_PRINT("creating thread\n");
+		// parent - alter the database in memory
+		for(; i < num_dbs && ! therr && err == ERR_NONE; i++)
+		{
+			DEBUG_PRINT("setting key\n");
+			// create the entry information for setting
+			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
+			ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
+			DEBUG_PRINT("setting value\n");
+			ent_inf[i].value = val;
+			DEBUG_PRINT("setting dbname\n");
+			ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
+			DEBUG_PRINT("setting entry\n");
+			ent_inf[i].entry = NULL;
+			DEBUG_PRINT("setting store->dbs\n");
+			ent_inf[i].dbs = &((*store)->dbs);
+			DEBUG_PRINT("setting error\n");
+			ent_inf[i].error = 0;
+			DEBUG_PRINT("creating thread\n");
 				
-				// create our thread
-				therr = pthread_create(&thids[i], NULL, memory_set,
-				                       &ent_inf[i]);
+			// create our thread
+			therr = pthread_create(&thids[i], NULL, memory_set,
+			                       &ent_inf[i]);
 
-				DEBUG_PRINT("notice: [parent] thread#%d %d (\"%s\" => \
+			DEBUG_PRINT("notice: [parent] thread#%d %d (\"%s\" => \
 \"%s\") to insert in db \"%s\"\n",
-				            i, (int) thids[i], key, val,
-							ent_inf[i].db_name);
+			            i, (int) thids[i], key, val,
+						ent_inf[i].db_name);
 
-				if(therr != ERR_NONE) 
-				{
-					err = ERR_THR;
-				}
+			if(therr != ERR_NONE) 
+			{
+				err = ERR_THR;
 			}
 		}
 
@@ -115,49 +112,55 @@ store_entry *store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			}
 			else
 			{
-				entry = ent_inf[i].entry;
+				entries[i] = ent_inf[i].entry;
 				err = ent_inf[i].error;
 				DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d \
 returned value %d\n",
 			                i, (int) thids[i], ent_inf[i].error);
+
+				if(entries[i] == NULL)
+				{
+					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
+					            dbs + i*MAX_DB_SIZE, key);
+				}
+				else
+				{
+					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
+					            dbs + i*MAX_DB_SIZE, entries[i]->key,
+								entries[i]->val);
+				}
 			}
 		}
 
 		free(ent_inf);
 		free(thids);
 	}
-	else if(pid == 0)
-	{
-		// *** PARENT *** 
-	}
-	else
-	{
-		err = ERR_FORK;
-	}
 
-	return entry;
+	return entries;
 }
 
-store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
-                        store_info *store)
+store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
+                         store_info *store)
 {
 	int err = 0;
 	int i;
 	int therr = 0;
 	pthread_t *thids = NULL;
 	struct entry_inf *ent_inf = NULL;
-	store_entry *entry = NULL;
+	store_entry **entries = NULL;
 
 	DEBUG_PRINT("notice: supplied key \"%s\", num_dbs %d\n",
 	            key, num_dbs);
-	
-	// create our thread entries
-	thids = (pthread_t *) calloc(num_dbs,
-	                             sizeof(pthread_t));
-	ent_inf = (struct entry_inf *) calloc(num_dbs,
-	                                      sizeof(struct entry_inf));
-	
-	if(thids == NULL || ent_inf == NULL)
+
+	if(store->dbs == NULL)
+	{
+		err = ERR_DB;
+	}
+	else if(NULL == (entries = (store_entry **) calloc(num_dbs,
+	                                                   sizeof(store_entry *)))
+	     || NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
+	                                                sizeof(struct entry_inf)))
+	     || NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
 	{
 		err = ERR_ALLOC;
 	}
@@ -167,7 +170,6 @@ store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 		{
 			// create the entry information for setting
 			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
-			ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
 			ent_inf[i].value = NULL;
 			ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
 			ent_inf[i].entry = NULL;
@@ -180,7 +182,7 @@ store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 
 			// check val, it's null probably
 			DEBUG_PRINT("notice: thread#%d %d (key \"%s\" \
- to search in db \"%s\"\n",
+ to search in db \"%s\")\n",
 			            i, (int) thids[i], key, ent_inf[i].db_name);
 
 			if(therr != 0)
@@ -207,10 +209,22 @@ store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 			}
 			else
 			{
-				entry = ent_inf[i].entry;
+				entries[i] = ent_inf[i].entry;
 				err = ent_inf[i].error;
 				DEBUG_PRINT("notice: ended thread#%d %d, returned %d\n",
 				            i, (int) thids[i], err);
+
+				if(entries[i] == NULL)
+				{
+					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
+					            dbs + i*MAX_DB_SIZE, entries[i]->key);
+				}
+				else
+				{
+					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
+					            dbs + i*MAX_DB_SIZE, entries[i]->key,
+								entries[i]->val);
+				}
 			}
 		}
 	}
@@ -218,7 +232,7 @@ store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 	free(thids);
 	free(ent_inf);
 
-	return entry;
+	return entries;
 }
 
 int store_server_act(int s, store_info **store)
@@ -236,8 +250,8 @@ int store_server_act(int s, store_info **store)
 	char *dbs = NULL;
 	int val_len = 0; // 32-bit and 64-bit intercompatibility
 	char *val = NULL;
-	store_entry *result = (store_entry *) -1;
-	int i = 0;// debug
+	store_entry **result = (store_entry **) -1;
+	int i = 0;
 	char ack_buff[STORE_ACK_LEN];
 	
 	DEBUG_PRINT("waiting for a connection...\n");
@@ -245,7 +259,7 @@ int store_server_act(int s, store_info **store)
 	// accept connection (if it fails, it is because server was closed: no error)
 	if(-1 != (client_s = accept(s, (struct sockaddr *) &client, &client_len)))
 	{
-		DEBUG_PRINT("accepted socket\n");
+		printf("connection incoming\n");
 
 		// init our start time
 		t_start = times(&start_tm);
@@ -337,26 +351,40 @@ int store_server_act(int s, store_info **store)
 					DEBUG_PRINT("got result %p\n", result);
 
 					// send the result
-					if(result != NULL)
+					for(i = 0; i < num_dbs; i++)
 					{
-						val_len = (int) strlen(result->val);
-						DEBUG_PRINT("writing val len %d\n", val_len);
-						write(client_s, &val_len, sizeof(int));
-						read(client_s, &ack_buff, STORE_ACK_LEN);
-						DEBUG_PRINT("read ack %s\n", ack_buff);
-						write(client_s, result->val, sizeof(char *));
-						DEBUG_PRINT("result \"%s\" written\n", result->val);
-					}
-					// if we didn't find it, return an empty string
-					else
-					{
-						val_len = 0;
-						DEBUG_PRINT("val_len is ZERO, not found\n");
-						write(client_s, &val_len, sizeof(int));
-						read(client_s, &ack_buff, STORE_ACK_LEN);
-						DEBUG_PRINT("read ack %s\n", ack_buff);
-						write(client_s, "", sizeof(char *));
-						DEBUG_PRINT("result \"\" written\n");
+						DEBUG_PRINT("\nWRITE ITERATION %d\n", i);
+
+						if(result != NULL)
+						{
+							val_len = (int) strlen(result[i]->val);
+							DEBUG_PRINT("writing val len %d\n", val_len);
+							write(client_s, &val_len, sizeof(int));
+							read(client_s, &ack_buff, STORE_ACK_LEN);
+							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
+							
+							write(client_s, result[i]->val,
+							                (val_len + 1) * sizeof(char));
+							DEBUG_PRINT("result \"%s\" written\n", result[i]->val);
+							read(client_s, &ack_buff, STORE_ACK_LEN);
+							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
+						}
+						// if we didn't find it, return an empty string
+						else
+						{
+							val_len = 0;
+							DEBUG_PRINT("val_len is ZERO, not found\n");
+							write(client_s, &val_len, sizeof(int));
+							read(client_s, &ack_buff, STORE_ACK_LEN);
+							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
+
+							write(client_s, "", (val_len + 1) * sizeof(char));
+							DEBUG_PRINT("result \"\" written\n");
+							read(client_s, &ack_buff, STORE_ACK_LEN);
+							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
+						}
+
+						DEBUG_PRINT("---DONE---\n\n");
 					}
 				}
 			}
@@ -389,11 +417,17 @@ int store_server_init()
 	struct sockaddr_un addr;
 	store_info *store = NULL;
 	int len;
+	char sock_path[MAX_SOCK_PATH_SIZE];
+
+	// set up our socket path
+	getcwd(sock_path, sizeof(sock_path));
+	strcat(sock_path, "/");
+	strcat(sock_path, STORE_SOCKET_PATH);
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strcpy(addr.sun_path, STORE_SOCKET_PATH);
+	strcpy(addr.sun_path, sock_path);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 	// set up signal to stop server correctly
@@ -425,7 +459,7 @@ int store_server_init()
 		error = ERR_MEM_SEMOPEN;
 		perror("sem_open");
 	}
-	else if(NULL != fopen(STORE_SOCKET_PATH, "r"))
+	else if(NULL != fopen(sock_path, "r"))
 	{
 		fprintf(stderr, "error: socket connection already exists");
 		error = ERR_SOCKETEXIST;
@@ -459,7 +493,7 @@ int store_server_init()
 		printf("database running...\n");
 		while(! stop_server)
 		{
-			DEBUG_PRINT("\n\n\nnotice: iteration with store %p\n", store);
+			DEBUG_PRINT("\n\nnotice: iteration with store %p\n", store);
 			error = store_server_act(s, &store);
 		}
 
@@ -478,7 +512,7 @@ int store_server_init()
 		close(s);
 
 		// also remove our socket file
-		unlink(STORE_SOCKET_PATH);
+		unlink(sock_path);
 	}
 
 	// unmap our shared memory

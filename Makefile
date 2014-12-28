@@ -1,2 +1,13 @@
-all:
-	gcc -W -Wall keystore.c store.c -o keystore
+SRCDIR = ./src
+BINDIR = ./bin
+
+all: keystore keystored elapsed
+
+keystored: $(SRCDIR)/daemon.* $(SRCDIR)/server.* $(SRCDIR)/memory.* $(SRCDIR)/disk.* $(SRCDIR)/common.* $(SRCDIR)/database.*
+	gcc -W -Wall $(SRCDIR)/daemon.c $(SRCDIR)/server.c $(SRCDIR)/memory.c $(SRCDIR)/disk.c $(SRCDIR)/common.c $(SRCDIR)/database.c -o $(BINDIR)/keystored -lpthread
+
+keystore: $(SRCDIR)/keystore.* $(SRCDIR)/client.* $(SRCDIR)/memory.* $(SRCDIR)/disk.* $(SRCDIR)/common.* $(SRCDIR)/database.*
+	gcc -W -Wall $(SRCDIR)/keystore.c $(SRCDIR)/client.c $(SRCDIR)/memory.c $(SRCDIR)/disk.c $(SRCDIR)/common.c $(SRCDIR)/database.c -o $(BINDIR)/keystore -lpthread
+
+elapsed:
+	gcc -W -Wall $(SRCDIR)/elapsed.c -o $(BINDIR)/elapsed

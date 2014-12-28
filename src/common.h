@@ -89,6 +89,7 @@
 #define STORE_ACK_LEN   3 // strlen("ok") + 1 (= \0)
 
 // pipe paths
+#define MAX_SOCK_PATH_SIZE 100
 #define STORE_SOCKET_PATH "keystore_server.sock"
 
 // entry type

@@ -31,11 +31,17 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	struct sockaddr_un addr;
 	int len;
 	char ack_buff[STORE_ACK_LEN];
+	char sock_path[MAX_SOCK_PATH_SIZE];
+
+	// set up our socket path
+	getcwd(sock_path, sizeof(sock_path));
+	strcat(sock_path, "/");
+	strcat(sock_path, STORE_SOCKET_PATH);
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strcpy(addr.sun_path, STORE_SOCKET_PATH);
+	strcpy(addr.sun_path, sock_path);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 	// initialize our socket
@@ -102,7 +108,7 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 
-		DEBUG_PRINT("---DONE---\n");
+		DEBUG_PRINT("---DONE---\n\n");
 	}
 
 	if(s >= 0)
@@ -123,18 +129,24 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	char mode = STORE_MODE_GET;
 	char *dbs_corrected = NULL;
 	char *key_corrected = NULL;
-	int i;
+	int i = 0;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
 	int len;
 	char ack_buff[STORE_ACK_LEN];
 	int val_len;
 	char *val = NULL;
+	char sock_path[MAX_SOCK_PATH_SIZE];
+
+	// set up our socket path
+	getcwd(sock_path, sizeof(sock_path));
+	strcat(sock_path, "/");
+	strcat(sock_path, STORE_SOCKET_PATH);
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strcpy(addr.sun_path, STORE_SOCKET_PATH);
+	strcpy(addr.sun_path, sock_path);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 	// initialize our socket
@@ -177,11 +189,11 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		write(s, &mode, sizeof(char));
 		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing mode '%s' to server\n", key_corrected);
+		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
 		write(s, key, MAX_KEY_SIZE * sizeof(char));
 		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing mode '%d' to server\n", num_dbs);
+		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
 		write(s, &num_dbs, sizeof(int));
 		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
@@ -190,25 +202,38 @@ int store_get(char key[], int num_dbs, char *dbs[])
 
 		DEBUG_PRINT("writing finished\n");
 		
-		// read the value result
-		// we can't read the address because it's not shared and it would
-		// give a segfault error
-		// for(i = 0; i < num_dbs; i++) entries[i];...
-		read(s, &val_len, sizeof(int));
-		DEBUG_PRINT("val_len \"%d\" read\n", val_len);
-		DEBUG_PRINT("writing ack\n");
-		write(s, STORE_ACK, STORE_ACK_LEN);
-		DEBUG_PRINT("ack written\n");
-
-		// memory alloc
-		if(NULL != (val = (char *) malloc((val_len + 1) * sizeof(char))))
+		for(i = 0; i < num_dbs && error == ERR_NONE; i++)
 		{
-			DEBUG_PRINT("malloc ok\n");
-			read(s, val, val_len * sizeof(char));
-			DEBUG_PRINT("val '%s' read\n", val);
+			DEBUG_PRINT("\nREAD ITERATION %d\n", i);
 
-			DEBUG_PRINT("---DONE---\n");
-			printf("%s: %s=%s\n", dbs[0], key, val);
+			// read the value result
+			// we can't read the address because it's not shared and it would
+			// give a segfault error
+			// for(i = 0; i < num_dbs; i++) entries[i];...
+			read(s, &val_len, sizeof(int));
+			DEBUG_PRINT("val_len \"%d\" read\n", val_len);
+			write(s, STORE_ACK, STORE_ACK_LEN);
+			DEBUG_PRINT("ack written\n");
+
+			// memory alloc
+			if(NULL != (val = (char *) malloc((val_len + 1) * sizeof(char))))
+			{
+				read(s, val, (val_len + 1) * sizeof(char));
+				DEBUG_PRINT("val \"%s\" read\n", val);
+				write(s, STORE_ACK, STORE_ACK_LEN);
+				DEBUG_PRINT("ack written\n");
+	
+				printf("%s: %s=%s\n", dbs[i], key, val);
+				DEBUG_PRINT("---DONE---\n");
+			}
+			else
+			{
+				perror("malloc");
+				error = ERR_ALLOC;
+			}
+			free(val);
+			val = NULL;
+			val_len = 0;
 		}
 	}
 
@@ -231,11 +256,17 @@ int store_halt()
 	int len;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
+	char sock_path[MAX_SOCK_PATH_SIZE];
+
+	// set up our socket path
+	getcwd(sock_path, sizeof(sock_path));
+	strcat(sock_path, "/");
+	strcat(sock_path, STORE_SOCKET_PATH);
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strcpy(addr.sun_path, STORE_SOCKET_PATH);
+	strcpy(addr.sun_path, sock_path);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 	DEBUG_PRINT("notice: database preparing to shut down\n");
