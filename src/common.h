@@ -86,7 +86,7 @@
 #define STORE_MODE_STOP 'x'
 
 #define STORE_ACK       "ok"
-#define STORE_ACK_LEN   3 // strlen("ok")
+#define STORE_ACK_LEN   3 // strlen("ok") + 1 (= \0)
 
 // pipe paths
 #define STORE_SOCKET_PATH "keystore_server.sock"
@@ -118,11 +118,10 @@ struct entry_inf {
 	char *value; // key/path to the name for the entry
 	struct entry *entry;
 	char *db_name;
-	struct db *dbs;
+	struct db **dbs;
 	int error;
 };
 
-void free_data(void *p);
 void print_error_case(int error);
 void print_error(char *msg);
 int max(int x, int y);

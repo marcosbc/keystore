@@ -1,11 +1,6 @@
 #include <stdio.h>
 #include "common.h"
 
-void free_data(void *p)
-{
-	p = NULL;
-}
-
 void print_error_case(int error)
 {
 	switch(error)

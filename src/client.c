@@ -6,7 +6,6 @@
  */
 
 #include <stdio.h>
-#include <sys/shm.h>
 #include <sys/socket.h> // socket related things
 #include <sys/un.h> // socket related things
 #include <pthread.h>
@@ -25,16 +24,12 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	int error = 0;
 	char mode = STORE_MODE_SET;
 	int val_len = strlen(value);
-	int shmid = 0;
-	key_t shm_key = ftok(".", KEY_ID);
 	char *dbs_corrected = NULL;
 	char *key_corrected = NULL;
 	int i;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
 	int len;
-	store_entry *result = NULL;
-	store_info *store = NULL;
 	char ack_buff[STORE_ACK_LEN];
 
 	// set sockaddr information values
@@ -43,24 +38,8 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	strcpy(addr.sun_path, STORE_SOCKET_PATH);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
-	#ifdef __DEBUG__
-	print_databases(num_dbs, dbs);
-	#endif
-
-	// get our memory location (our first root database with root values)
-	// note we only need to do this if we are going to get-set via memory
-	if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0666)))
-	{
-		error = ERR_STORE_SHMLOAD;
-		perror("shmget");
-	}
-	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
-	{
-		error = ERR_STORE_SHMAT;
-		perror("shmat");
-	}
 	// initialize our socket
-	else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 	{
 		error = ERR_SOCKETCREATE;
 	}
@@ -80,10 +59,6 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	}
 	else
 	{
-		#ifdef __DEBUG__
-		print_existing_databases(store->dbs);
-		#endif
-
 		// correct key and dbs variable's size
 		strncpy(key_corrected, key, MAX_KEY_SIZE - 1);
 		key_corrected[MAX_VAL_SIZE - 1] = '\0';
@@ -97,36 +72,37 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 		// send the data
 		DEBUG_PRINT("writing mode '%c' to server\n", mode);
 		write(s, &mode, sizeof(char));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
 		write(s, key_corrected, MAX_KEY_SIZE * sizeof(char));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
 		write(s, &num_dbs, sizeof(int));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
 		write(s, dbs_corrected, num_dbs * MAX_DB_SIZE * sizeof(char));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing val_len '%d' to server\n", val_len);
 		write(s, &val_len, sizeof(int));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing value '%s' to server\n", value);
 		write(s, value, val_len * sizeof(char));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		
 		DEBUG_PRINT("writing finished\n");
 		
-		// read the address
-		read(s, &result, sizeof(result));
+		// read the result (in this case it's another ack)
+		// we can't read a recvd address since it would give segm error
+		read(s, ack_buff, STORE_ACK_LEN);
+		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 
-		DEBUG_PRINT("got address %p from server\n", result);
-
-		// read entry location (which is persistent)
+		DEBUG_PRINT("---DONE---\n");
 	}
 
 	if(s >= 0)
@@ -145,17 +121,15 @@ int store_get(char key[], int num_dbs, char *dbs[])
 {
 	int error = 0;
 	char mode = STORE_MODE_GET;
-	int shmid;
-	key_t shm_key = ftok(".", KEY_ID);
 	char *dbs_corrected = NULL;
 	char *key_corrected = NULL;
 	int i;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
 	int len;
-	store_entry *result = NULL;
-	store_info *store = NULL;
 	char ack_buff[STORE_ACK_LEN];
+	int val_len;
+	char *val = NULL;
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
@@ -163,22 +137,8 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	strcpy(addr.sun_path, STORE_SOCKET_PATH);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
-	#ifdef __DEBUG__
-	print_databases(num_dbs, dbs);
-	#endif
-
-	// get our memory location (our first root database with root values)
-	// note we only need to do this if we are going to get-set via memory
-	if((shmid = shmget(shm_key, sizeof(struct info), 0666)) == -1)
-	{
-		error = ERR_STORE_SHMLOAD;
-	}
-	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
-	{
-		error = ERR_STORE_SHMAT;
-	}
 	// initialize our socket
-	else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 	{
 		error = ERR_SOCKETCREATE;
 	}
@@ -198,10 +158,6 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	}
 	else
 	{
-		#ifdef __DEBUG__
-		print_existing_databases(store->dbs);
-		#endif
-
 		// correct key and dbs variable's size
 		strncpy(key_corrected, key, MAX_KEY_SIZE - 1);
 		key_corrected[MAX_VAL_SIZE - 1] = '\0';
@@ -219,25 +175,41 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		// send the data
 		DEBUG_PRINT("writing mode '%c' to server\n", mode);
 		write(s, &mode, sizeof(char));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing mode '%s' to server\n", key_corrected);
 		write(s, key, MAX_KEY_SIZE * sizeof(char));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing mode '%d' to server\n", num_dbs);
 		write(s, &num_dbs, sizeof(int));
-		read(s, ack_buff, 4);
+		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
 		write(s, dbs_corrected, num_dbs * MAX_DB_SIZE * sizeof(char));
 
 		DEBUG_PRINT("writing finished\n");
 		
-		// read the address
-		read(s, &result, sizeof(result));
+		// read the value result
+		// we can't read the address because it's not shared and it would
+		// give a segfault error
+		// for(i = 0; i < num_dbs; i++) entries[i];...
+		read(s, &val_len, sizeof(int));
+		DEBUG_PRINT("val_len \"%d\" read\n", val_len);
+		DEBUG_PRINT("writing ack\n");
+		write(s, STORE_ACK, STORE_ACK_LEN);
+		DEBUG_PRINT("ack written\n");
 
-		DEBUG_PRINT("got address %p from server\n", result);
+		// memory alloc
+		if(NULL != (val = (char *) malloc((val_len + 1) * sizeof(char))))
+		{
+			DEBUG_PRINT("malloc ok\n");
+			read(s, val, val_len * sizeof(char));
+			DEBUG_PRINT("val '%s' read\n", val);
+
+			DEBUG_PRINT("---DONE---\n");
+			printf("%s: %s=%s\n", dbs[0], key, val);
+		}
 	}
 
 	if(s >= 0)
@@ -256,12 +228,9 @@ int store_halt()
 {
 	int error = 0;
 	char mode = STORE_MODE_STOP;
-	int shmid;
-	key_t shm_key = ftok(".", KEY_ID);
 	int len;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
-	store_info *store = NULL;
 
 	// set sockaddr information values
 	memset(&addr, 0, sizeof(addr));
@@ -271,18 +240,8 @@ int store_halt()
 
 	DEBUG_PRINT("notice: database preparing to shut down\n");
 
-	// get our memory location (our first root database with root values)
-	// note we only need to do this if we are going to get-set via memory
-	if((shmid = shmget(shm_key, sizeof(struct info), 0666)) == -1)
-	{
-		error = ERR_STORE_SHMLOAD;
-	}
-	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
-	{
-		error = ERR_STORE_SHMAT;
-	}
 	// initialize our socket
-	else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 	{
 		error = ERR_SOCKETCREATE;
 	}

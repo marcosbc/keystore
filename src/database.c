@@ -4,28 +4,33 @@
 
 store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 {
+	store_db *prev = NULL;
 	store_db **iterator = dbs;
-	store_db *db = NULL;
 
 	// find the last element
-	while((*iterator)->next != NULL)
+	while(*iterator != NULL)
 	{
+		prev = *iterator;
 		iterator = &((*dbs)->next);
 	}
 
 	// now create it
-	db = (store_db *) malloc(sizeof(store_db));
+	*iterator = (store_db *) malloc(sizeof(store_db));
 
-	if(db != NULL)
+	if(*iterator != NULL)
 	{
+		strcpy((*iterator)->name, name);
+		(*iterator)->ent = NULL;
+		(*iterator)->next = NULL;
+		
 		// add basic fields
-		(*iterator)->next = db;
-		strcpy(db->name, name);
-		db->ent = NULL;
-		db->next = NULL;
+		if(prev != NULL)
+		{
+			prev->next = *iterator;
+		}
 	}
 
-	return db;
+	return *iterator;
 }
 
 store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
@@ -70,13 +75,11 @@ store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 // db?
 store_db *locate_db(char *name, store_db *db)
 {
-	while(db != NULL)
+	while(db != NULL && 0 != strncmp(name, db->name,
+	                                 (size_t) min((int) strlen(name),
+									              MAX_DB_SIZE)))
 	{
-		if(0 != strncmp(name, db->name, (size_t) min((int) strlen(name),
-		                                             MAX_DB_SIZE)))
-		{
-			db = db->next;
-		}
+		db = db->next;
 	}
 
 	return db;

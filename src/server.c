@@ -64,14 +64,21 @@ store_entry *store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			// parent - alter the database in memory
 			for(; i < num_dbs && ! therr && err == ERR_NONE; i++)
 			{
+				DEBUG_PRINT("setting key\n");
 				// create the entry information for setting
 				strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
 				ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
+				DEBUG_PRINT("setting value\n");
 				ent_inf[i].value = val;
+				DEBUG_PRINT("setting dbname\n");
 				ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
+				DEBUG_PRINT("setting entry\n");
 				ent_inf[i].entry = NULL;
-				ent_inf[i].dbs = (*store)->dbs;
+				DEBUG_PRINT("setting store->dbs\n");
+				ent_inf[i].dbs = &((*store)->dbs);
+				DEBUG_PRINT("setting error\n");
 				ent_inf[i].error = 0;
+				DEBUG_PRINT("creating thread\n");
 				
 				// create our thread
 				therr = pthread_create(&thids[i], NULL, memory_set,
@@ -79,7 +86,7 @@ store_entry *store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 
 				DEBUG_PRINT("notice: [parent] thread#%d %d (\"%s\" => \
 \"%s\") to insert in db \"%s\"\n",
-				            i, (int) thids[i], key, "",//val,
+				            i, (int) thids[i], key, val,
 							ent_inf[i].db_name);
 
 				if(therr != ERR_NONE) 
@@ -100,7 +107,7 @@ store_entry *store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			DEBUG_PRINT("notice: [parent] ending thread#parent-%d %d...\n",
 			            i, (int) thids[i]);
 				
-			therr = pthread_join(thids[i], (void **) &err);
+			therr = pthread_join(thids[i], NULL);
 
 			if(therr != 0)
 			{
@@ -110,16 +117,10 @@ store_entry *store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			{
 				entry = ent_inf[i].entry;
 				err = ent_inf[i].error;
-				DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d\
+				DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d \
 returned value %d\n",
 			                i, (int) thids[i], ent_inf[i].error);
 			}
-		}
-
-		// unmap our shared memory
-		if(err != ERR_STORE_SHMLOAD && -1 == shmdt(*store))
-		{
-			err = ERR_STORE_SHMDT;
 		}
 
 		free(ent_inf);
@@ -170,7 +171,7 @@ store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 			ent_inf[i].value = NULL;
 			ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
 			ent_inf[i].entry = NULL;
-			ent_inf[i].dbs = store->dbs;
+			ent_inf[i].dbs = &(store->dbs);
 			ent_inf[i].error = 0;
 
 			// create our thread -> ERROR???
@@ -208,16 +209,9 @@ store_entry *store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 			{
 				entry = ent_inf[i].entry;
 				err = ent_inf[i].error;
-				DEBUG_PRINT("notice: ended thread#%d %d, \
-returned %d\n",
+				DEBUG_PRINT("notice: ended thread#%d %d, returned %d\n",
 				            i, (int) thids[i], err);
 			}
-		}
-
-		// unmap our shared memory
-		if(-1 == shmdt(store))
-		{
-			err = ERR_STORE_SHMDT;
 		}
 	}
 
@@ -244,14 +238,25 @@ int store_server_act(int s, store_info **store)
 	char *val = NULL;
 	store_entry *result = (store_entry *) -1;
 	int i = 0;// debug
+	char ack_buff[STORE_ACK_LEN];
 	
 	DEBUG_PRINT("waiting for a connection...\n");
 
 	// accept connection (if it fails, it is because server was closed: no error)
 	if(-1 != (client_s = accept(s, (struct sockaddr *) &client, &client_len)))
 	{
+		DEBUG_PRINT("accepted socket\n");
+
 		// init our start time
 		t_start = times(&start_tm);
+		DEBUG_PRINT("has t_start\n");
+	
+		#ifdef __DEBUG__
+		if((*store)->dbs != NULL)
+		{
+			print_existing_databases((*store)->dbs);
+		}
+		#endif
 
 		// read data
 		read(client_s, &mode, sizeof(char));
@@ -278,7 +283,6 @@ int store_server_act(int s, store_info **store)
 			else
 			{
 				read(client_s, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
-				write(client_s, STORE_ACK, STORE_ACK_LEN);
 				for(i = 0; i < num_dbs; i++)
 				{
 					DEBUG_PRINT("got dbs[%d] \"%s\" from client\n", i,
@@ -289,6 +293,7 @@ int store_server_act(int s, store_info **store)
 				if(mode == STORE_MODE_SET)
 				{
 					DEBUG_PRINT("setting mode\n");
+					write(client_s, STORE_ACK, STORE_ACK_LEN);
 
 					// first, get our val_len
 					read(client_s, &val_len, sizeof(int));
@@ -316,6 +321,8 @@ int store_server_act(int s, store_info **store)
 						DEBUG_PRINT("proceeding to write\n");
 						// now that we have everything, call function for setting
 						result = store_write(key, val, num_dbs, dbs, store);
+
+						// send the result pointer address to our receiver
 					}
 				}
 				// 'get' mode
@@ -325,8 +332,32 @@ int store_server_act(int s, store_info **store)
 					
 					DEBUG_PRINT("proceeding to read\n");
 					// now that we have everything, call function for setting
-					// now that we have everything, call the function getting
 					result = store_read(key, num_dbs, dbs, *store);
+
+					DEBUG_PRINT("got result %p\n", result);
+
+					// send the result
+					if(result != NULL)
+					{
+						val_len = (int) strlen(result->val);
+						DEBUG_PRINT("writing val len %d\n", val_len);
+						write(client_s, &val_len, sizeof(int));
+						read(client_s, &ack_buff, STORE_ACK_LEN);
+						DEBUG_PRINT("read ack %s\n", ack_buff);
+						write(client_s, result->val, sizeof(char *));
+						DEBUG_PRINT("result \"%s\" written\n", result->val);
+					}
+					// if we didn't find it, return an empty string
+					else
+					{
+						val_len = 0;
+						DEBUG_PRINT("val_len is ZERO, not found\n");
+						write(client_s, &val_len, sizeof(int));
+						read(client_s, &ack_buff, STORE_ACK_LEN);
+						DEBUG_PRINT("read ack %s\n", ack_buff);
+						write(client_s, "", sizeof(char *));
+						DEBUG_PRINT("result \"\" written\n");
+					}
 				}
 			}
 		}
@@ -335,9 +366,6 @@ int store_server_act(int s, store_info **store)
 		{
 			store_stop();
 		}
-
-		// send the result pointer address to our receiver
-		write(client_s, &store, sizeof(store_entry *));
 
 		// close connection
 		close(client_s);
@@ -431,7 +459,7 @@ int store_server_init()
 		printf("database running...\n");
 		while(! stop_server)
 		{
-			DEBUG_PRINT("notice: iteration\n");
+			DEBUG_PRINT("\n\n\nnotice: iteration with store %p\n", store);
 			error = store_server_act(s, &store);
 		}
 
@@ -451,6 +479,12 @@ int store_server_init()
 
 		// also remove our socket file
 		unlink(STORE_SOCKET_PATH);
+	}
+
+	// unmap our shared memory
+	if(error != ERR_STORE_SHMLOAD && -1 == shmdt(store))
+	{
+		error = ERR_STORE_SHMDT;
 	}
 
 	// now that we're done, remove the shared memory
