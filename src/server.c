@@ -351,11 +351,11 @@ int store_server_act(int s, store_info **store)
 					DEBUG_PRINT("got result %p\n", result);
 
 					// send the result
-					for(i = 0; i < num_dbs; i++)
+					for(i = 0; i < num_dbs && result != NULL; i++)
 					{
 						DEBUG_PRINT("\nWRITE ITERATION %d\n", i);
 
-						if(result != NULL)
+						if(result[i] != NULL)
 						{
 							val_len = (int) strlen(result[i]->val);
 							DEBUG_PRINT("writing val len %d\n", val_len);

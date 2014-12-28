@@ -56,8 +56,6 @@ void *memory_set(void *info)
 	sem_t *sem_rw = sem_open(SEM_RW, 0);
 	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
 	store_entry *entry = NULL;
-	store_db **pp = NULL;
-	store_entry *p = NULL;
 	
 	// extract information from our info variable
 	char *key = ((struct entry_inf *) info)->key;
@@ -158,30 +156,16 @@ void *memory_set(void *info)
 				((struct entry_inf *) info)->entry = entry;
 
 				#ifdef __DEBUG__
-				// see what our dbs contains now
-				pp = dbs;
-				DEBUG_PRINT("TRACE: dbs null?: %p\n", pp);
-				while(*pp != NULL)
-				{
-					printf("\n\n--db name: %s\n", (*pp)->name);
-					p = (*pp)->ent;
-					while(p != NULL)
-					{
-						printf("entry key=%s, value=%s\n", p->key, p->val);
-						p = p->next;
-					}
-
-					pp = &((*pp)->next);
-				}
+				print_store_tree(*dbs);
 
 				if(entry != NULL)
 				{
-					DEBUG_PRINT("\n\nfound entry: %p with %s=%s\n", entry,
+					DEBUG_PRINT("\n\nhas entry: %p with %s=%s\n", entry,
 					            entry->key, entry->val);
 				}
 				else
 				{
-					DEBUG_PRINT("\n\n*NOT* found entry, NULL: %p\n", entry);
+					DEBUG_PRINT("\n\nwe *DONT* have an entry, NULL: %p\n", entry);
 				}
 				#endif
 			}
@@ -229,6 +213,8 @@ void *memory_get(void *info)
 		// we have a limit of max readers at once
 		memory_read_lock(sem_rw);
 
+		DEBUG_PRINT("locating db %s in dbs %p\n", db_name, dbs);
+
 		// locate our db and find our entry
 		if(NULL == (db = locate_db(db_name, dbs)))
 		{
@@ -261,6 +247,20 @@ void *memory_get(void *info)
 			// save the entry and value to our info variable (as output)
 			((struct entry_inf *) info)->entry = ent;
 			((struct entry_inf *) info)->value = value;
+
+			#ifdef __DEBUG__
+			print_store_tree(dbs);
+
+			if(ent != NULL)
+			{
+				DEBUG_PRINT("\n\nhas entry: %p with %s=%s\n", ent,
+				            ent->key, ent->val);
+			}
+			else
+			{
+				DEBUG_PRINT("\n\nwe *DONT* have an entry, NULL: %p\n", ent);
+			}
+			#endif
 		}
 
 		// reading done!

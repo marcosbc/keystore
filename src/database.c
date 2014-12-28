@@ -11,7 +11,7 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 	while(*iterator != NULL)
 	{
 		prev = *iterator;
-		iterator = &((*dbs)->next);
+		iterator = &((*iterator)->next);
 	}
 
 	// now create it
@@ -118,5 +118,24 @@ void print_existing_databases(store_db *store_dbs)
     }
     printf("------------------\n\n");
 
+}
+
+void print_store_tree(store_db *dbs)
+{
+	store_entry *p = NULL;
+
+	// see what our dbs contains now
+	while(dbs != NULL)
+	{
+		printf("\n\n--- database %s ---\n", dbs->name);
+		p = dbs->ent;
+		while(p != NULL)
+		{
+			printf("* %s=%s\n", p->key, p->val);
+			p = p->next;
+		}
+
+		dbs = dbs->next;
+	}
 }
 #endif
