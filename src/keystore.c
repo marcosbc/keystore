@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "common.h"
-#include "store.h"
+#include "client.h"
 #include "keystore.h"
 
 // modes:

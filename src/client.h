@@ -8,19 +8,7 @@
 #define __KEYSTORE_STORE__
 
 // pipe paths
-#define STORE_PIPE "keystore_fifo"
-#define STORE_PIPE_ACK "keystore_fifo_ack"
-
-// pid file path
-#define PID_FILENAME "keystore_pid"
-
-// ack message
-#define STORE_PIPE_ACK_MSG "ok"
-#define STORE_PIPE_ACK_MSG_LEN 3 // sizeof("ok")
-
-#define STORE_PIPE_MODE_SET  's'
-#define STORE_PIPE_MODE_GET  'g'
-#define STORE_PIPE_MODE_STOP 'x'
+#define CLIENT_SOCKET_ADDRESS "keystore_client.sock"
 
 // for pipe info sending
 struct current_entry_info {

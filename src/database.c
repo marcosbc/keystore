@@ -14,7 +14,7 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 	}
 
 	// now create it
-	db = (store_db *) store_data(sizeof(store_db));
+	db = (store_db *) malloc(sizeof(store_db));
 
 	if(db != NULL)
 	{
@@ -39,7 +39,7 @@ store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
 		iterator = &((*iterator)->next);
 	}
 
-	entry = (store_entry *) store_data(sizeof(store_entry));
+	entry = (store_entry *) malloc(sizeof(store_entry));
 		DEBUG_PRINT("alloc: %p\n", entry);
 	if(entry != NULL)
 	{

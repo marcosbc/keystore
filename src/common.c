@@ -1,14 +1,43 @@
 #include <stdio.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include "common.h"
 
-void *store_data(size_t bytes)
+int socket_setup(char sockname[], int *s, struct sockaddr_un *addr)
 {
-	void *p = NULL;
+	int len = 0;
+	int error = 1;
 
-	DEBUG_PRINT("storing %d bytes\n", (int) bytes);
-	p = malloc(bytes);
+	memset(addr, 0, sizeof(*addr));
 
-	return p;
+	// create our socket
+	if(-1 >= (*s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	{
+		perror("socket");
+	}
+	if(NULL != fopen(sockname, "r"))
+	{
+		fprintf(stderr, "error: socket connection already exists");
+	}
+	else
+	{
+		addr->sun_family = AF_UNIX;
+		strcpy(addr->sun_path, sockname);
+
+		len = sizeof(addr->sun_family) + (strlen(addr->sun_path) + 1);
+		
+		// bind...
+		if (bind(*s, (struct sockaddr *) addr, len) < 0)
+		{
+			perror("bind");
+		}
+		else
+		{
+			error = 0;
+		}
+	}
+
+	return error;
 }
 
 void free_data(void *p)
@@ -20,9 +49,6 @@ void print_error_case(int error)
 {
 	switch(error)
 	{
-		case ERR_USE:
-			print_error(ERR_USE_MSG);
-			break;
 		case ERR_FORK:
 			print_error(ERR_FORK_MSG);
 			break;

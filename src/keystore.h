@@ -7,6 +7,9 @@
 #ifndef __KEYSTORE__
 #define __KEYSTORE__
 
+#define ERR_USE 1
+#define ERR_USE_MSG "use: ./keystore [set KEY VALUE|get KEY] DB1[ DB2[ ...]]\n"
+
 #define MODE                1
 #define MODE_INIT           "start"
 #define MODE_INIT_ID        1

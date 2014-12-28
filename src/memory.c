@@ -20,7 +20,7 @@
 
 int memory_init()
 {
-	int error = 0;
+	int ok = 1;
 	sem_t *sem_mutex, *sem_rw;
 	
 	DEBUG_PRINT("notice: creating semaphores for memory operations\n");
@@ -35,16 +35,15 @@ int memory_init()
 		{
 			fprintf(stderr, "error: couldn't create semaphore \"%s\"\n",
 			        SEM_MUTEX);
-			error = 16;
 		}
 		if(sem_rw == (sem_t *) -1)
 		{
 			fprintf(stderr, "error: couldn't create semaphore \"%s\"\n", SEM_RW);
-			error = 16;
 		}
+		ok = 0;
 	}
 
-	return error;
+	return ok;
 }
 
 void *memory_set(void *info)
@@ -109,7 +108,7 @@ void *memory_set(void *info)
 			}
 			else
 			{
-				entry->val = (char *) store_data(val_len * sizeof(char));
+				entry->val = (char *) malloc(val_len * sizeof(char));
 				
 				if(entry->val == NULL)
 				{

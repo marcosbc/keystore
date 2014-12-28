@@ -11,8 +11,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/un.h> // socket related
 
-#define __DEBUG__
+// #define __DEBUG__
 #ifdef __DEBUG__
 #define DEBUG_PRINT(...) { fprintf(stderr, __VA_ARGS__); }
 #else
@@ -23,8 +24,6 @@
 #define SHM_SIZE 1024
 
 #define ERR_NONE 0
-#define ERR_USE 1
-#define ERR_USE_MSG "use: ./keystore [set KEY VALUE|get KEY] DB1[ DB2[ ...]]"
 #define ERR_FORK 2
 #define ERR_FORK_MSG "fork returned a number less than zero"
 #define ERR_ALLOC 5
@@ -61,12 +60,15 @@
 #define ERR_FIFO_CREATE_MSG "the fifo pipe couldn't be created"
 #define ERR_FIFO_OPEN 39
 #define ERR_FIFO_OPEN_MSG "the fifo pipe couln't be opened"
+#define ERR_CONNECT 40
+#define ERR_LISTEN 41
+#define ERR_ACCEPT 41
 
 #define MAX_PATH_SIZE	1024
 #define MAX_DB_SIZE		16
 #define MAX_DICT_SIZE	16
 #define MAX_KEY_SIZE	32
-#define MAX_VAL_SIZE	512
+#define MAX_VAL_SIZE	1024 // because we have to have a limit in recv()
 #define COLLECTION_DELIMITER '.'
 
 // for shared memory RW (we want to be able to have multiple readers,
@@ -76,6 +78,10 @@
 
 #define SEM_MUTEX		"mutex"
 #define SEM_RW			"readwrite"
+
+#define STORE_MODE_SET  's'
+#define STORE_MODE_GET  'g'
+#define STORE_MODE_STOP 'x'
 
 // entry type
 typedef struct entry {
@@ -108,7 +114,7 @@ struct entry_inf {
 	int error;
 };
 
-void *store_data(size_t bytes);
+int socket_setup(char sockname[], int *s, struct sockaddr_un *addr);
 void free_data(void *p);
 void print_error_case(int error);
 void print_error(char *msg);
