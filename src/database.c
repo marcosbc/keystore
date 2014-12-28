@@ -81,3 +81,39 @@ store_db *locate_db(char *name, store_db *db)
 
 	return db;
 }
+
+#ifdef __DEBUG__
+void print_databases(int num_dbs, char *dbs[])
+{
+	int i;
+
+    printf("\nlist of databases:\n------------------\n");
+    for(i = 0; i < num_dbs; i++)
+    {
+        printf("database#%d: %s\n", i, dbs[i]);
+    }
+    printf("-----------------\n\n");
+}
+
+void print_existing_databases(store_db *store_dbs)
+{
+	int i = 0;
+
+    printf("\nlist of databases:\n------------------\n");
+    while(store_dbs != NULL)
+    {
+		if(store_dbs->name != NULL)
+		{
+			printf("database#%d: %s\n", i, store_dbs->name);
+		}
+		else
+		{
+			printf("database#%d (unnamed)\n", i);
+		}
+		i++;
+		store_dbs = store_dbs->next;
+    }
+    printf("------------------\n\n");
+
+}
+#endif

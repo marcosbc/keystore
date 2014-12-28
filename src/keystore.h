@@ -8,15 +8,13 @@
 #define __KEYSTORE__
 
 #define ERR_USE 1
-#define ERR_USE_MSG "use: ./keystore [set KEY VALUE|get KEY] DB1[ DB2[ ...]]\n"
+#define ERR_USE_MSG "use: %s [set KEY VALUE|get KEY] DB1[ DB2[ ...]]\n"
 
 #define MODE                1
-#define MODE_INIT           "start"
-#define MODE_INIT_ID        1
 #define MODE_SET            "set"
-#define MODE_SET_ID         2
+#define MODE_SET_ID         1
 #define MODE_GET            "get"
-#define MODE_GET_ID         3
+#define MODE_GET_ID         2
 #define MODE_HALT           "stop"
 #define MODE_HALT_ID        0
 

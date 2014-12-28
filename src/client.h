@@ -29,9 +29,4 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[]);
 int store_get(char key[], int num_dbs, char *dbs[]);
 int store_halt();
 
-#ifdef __DEBUG__
-void print_databases(int num_dbs, char *dbs[]);
-void print_existing_databases(store_db *store_dbs);
-#endif
-
 #endif

@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/un.h> // socket related
 
 // #define __DEBUG__
 #ifdef __DEBUG__
@@ -60,9 +59,12 @@
 #define ERR_FIFO_CREATE_MSG "the fifo pipe couldn't be created"
 #define ERR_FIFO_OPEN 39
 #define ERR_FIFO_OPEN_MSG "the fifo pipe couln't be opened"
-#define ERR_CONNECT 40
-#define ERR_LISTEN 41
-#define ERR_ACCEPT 41
+#define ERR_SOCKETEXIST 40
+#define ERR_SOCKETCREATE 41
+#define ERR_BIND 42
+#define ERR_LISTEN 43
+#define ERR_ACCEPT 44
+#define ERR_CONNECT 44
 
 #define MAX_PATH_SIZE	1024
 #define MAX_DB_SIZE		16
@@ -82,6 +84,9 @@
 #define STORE_MODE_SET  's'
 #define STORE_MODE_GET  'g'
 #define STORE_MODE_STOP 'x'
+
+// pipe paths
+#define STORE_SOCKET_PATH "keystore_server.sock"
 
 // entry type
 typedef struct entry {
@@ -114,7 +119,6 @@ struct entry_inf {
 	int error;
 };
 
-int socket_setup(char sockname[], int *s, struct sockaddr_un *addr);
 void free_data(void *p);
 void print_error_case(int error);
 void print_error(char *msg);

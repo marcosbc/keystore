@@ -226,29 +226,32 @@ returned %d\n",
 int store_server_act(int s, store_info **store)
 {
 	int error = 0;
-	int remote_s = -1; // remote socket
-	struct sockaddr_un remote;
-	socklen_t remote_len = sizeof(remote);
+	int client_s = -1; // remote socket
+	struct sockaddr_un client;
+	socklen_t client_len = sizeof(client);
 	char mode;
 	char key[MAX_VAL_SIZE];
-	uint32_t num_dbs; // 32-bit and 64-bit intercompatibility
-	char *dbs;
-	uint32_t val_len = 0; // 32-bit and 64-bit intercompatibility
+	int num_dbs; // 32-bit and 64-bit intercompatibility
+	char *dbs = NULL;
+	int val_len = 0; // 32-bit and 64-bit intercompatibility
 	char *val = NULL;
 	store_entry *result = (store_entry *) -1;
 
 	DEBUG_PRINT("waiting for a connection...\n");
 
 	// accept connection (if it fails, it is because server was closed: no error)
-	if(-1 != (remote_s = accept(s, (struct sockaddr *) &remote, &remote_len)))
+	if(-1 != (client_s = accept(s, (struct sockaddr *) &client, &client_len)))
 	{
 		// read data
-		read(remote_s, &mode, sizeof(char));
+		read(client_s, &mode, sizeof(char));
+		DEBUG_PRINT("got mode \"%c\" from client\n", mode);
 
 		if(mode == STORE_MODE_SET || mode == STORE_MODE_GET)
 		{
-			read(remote_s, &key, MAX_VAL_SIZE * sizeof(char));
-			read(remote_s, &num_dbs, sizeof(uint32_t));
+			read(client_s, &key, MAX_VAL_SIZE * sizeof(char));
+			DEBUG_PRINT("got key \"%s\" from client\n", key);
+			read(client_s, &num_dbs, sizeof(uint32_t));
+			DEBUG_PRINT("got num_dbs \"%d\" from client\n", num_dbs);
 			
 			dbs = (char *) malloc(num_dbs * MAX_DB_SIZE * sizeof(char));
 			if(dbs == NULL)
@@ -258,7 +261,8 @@ int store_server_act(int s, store_info **store)
 			}
 			else
 			{
-				read(remote_s, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
+				read(client_s, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
+				DEBUG_PRINT("got dbs[0] \"%s\" from client\n", dbs[0]);
 
 				// if we're setting a value, we must also read it
 				if(mode == STORE_MODE_SET)
@@ -275,8 +279,10 @@ int store_server_act(int s, store_info **store)
 					else
 					{
 						/** PLEASE LOOK */
-						/* val_len = */read(remote_s, val, val_len * sizeof(char));
+						/* val_len = */read(client_s, val, val_len * sizeof(char));
 						val[val_len] = '\0'; // ensure we reach end of string
+
+						DEBUG_PRINT("got value \"%s\" from client\n", val);
 
 						// now that we have everything, call function for setting
 						result = store_write(key, val, num_dbs, dbs, store);
@@ -297,10 +303,10 @@ int store_server_act(int s, store_info **store)
 		}
 
 		// send the result pointer address to our receiver
-		write(remote_s, &store, sizeof(store_entry *));
+		write(client_s, &store, sizeof(store_entry *));
 
 		// close connection
-		close(remote_s);
+		close(client_s);
 
 		DEBUG_PRINT("connection closed\n");
 	}
@@ -317,8 +323,15 @@ int store_server_init()
 	int s = -1; // our socket
 	struct sockaddr_un addr;
 	store_info *store = NULL;
+	int len;
 
-	// set up signal to stop server
+	// set sockaddr information values
+	addr.sun_family = AF_UNIX;
+	strcpy(addr.sun_path, STORE_SOCKET_PATH);
+	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
+	memset(&addr, 0, sizeof(addr));
+
+	// set up signal to stop server correctly
 	act.sa_handler = store_stop;
 	act.sa_flags = 0;
 	sigemptyset(&act.sa_mask);
@@ -338,7 +351,7 @@ int store_server_init()
 	{
 		error = ERR_STORE_SHMCREATE;
 	}
-	if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
+	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
 	{
 		error = ERR_STORE_SHMAT;
 	}
@@ -347,15 +360,27 @@ int store_server_init()
 		error = ERR_MEM_SEMOPEN;
 		perror("sem_open");
 	}
-	// create our socket
-	else if(socket_setup(SERVER_SOCKET_ADDRESS, &s, &addr))
+	else if(NULL != fopen(STORE_SOCKET_PATH, "r"))
 	{
-		error = ERR_CONNECT;
+		fprintf(stderr, "error: socket connection already exists");
+		error = ERR_SOCKETEXIST;
+	}
+	// create our socket
+	else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	{
+		error = ERR_SOCKETCREATE;
 	}
 	else if(listen(s, 5) < 0)
 	{
 		perror("listen");
+		fprintf(stderr, "s=%d\n", s);
 		error = ERR_LISTEN;
+	}
+	// bind socket to file
+	else if (bind(s, (struct sockaddr *) &addr, len) < 0)
+	{
+		perror("bind");
+		error = ERR_BIND;
 	}
 	else
 	{
@@ -389,7 +414,7 @@ int store_server_init()
 		close(s);
 
 		// also remove our socket file
-		unlink(SERVER_SOCKET_ADDRESS);
+		unlink(STORE_SOCKET_PATH);
 	}
 
 	// now that we're done, remove the shared memory
@@ -402,39 +427,3 @@ int store_server_init()
 
 	return error;
 }
-
-#ifdef __DEBUG__
-void print_databases(int num_dbs, char *dbs[])
-{
-	int i;
-
-    printf("\nlist of databases:\n------------------\n");
-    for(i = 0; i < num_dbs; i++)
-    {
-        printf("database#%d: %s\n", i, dbs[i]);
-    }
-    printf("-----------------\n\n");
-}
-
-void print_existing_databases(store_db *store_dbs)
-{
-	int i = 0;
-
-    printf("\nlist of databases:\n------------------\n");
-    while(store_dbs != NULL)
-    {
-		if(store_dbs->name != NULL)
-		{
-			printf("database#%d: %s\n", i, store_dbs->name);
-		}
-		else
-		{
-			printf("database#%d (unnamed)\n", i);
-		}
-		i++;
-		store_dbs = store_dbs->next;
-    }
-    printf("------------------\n\n");
-
-}
-#endif
