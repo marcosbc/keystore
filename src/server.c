@@ -531,8 +531,11 @@ int store_server_init()
 		error = ERR_STORE_SHMCTL;
 	}
 
-	// clear our semaphores and free memory
-	memory_clear(&dbs);
+	if(error != ERR_MEM_SEMOPEN)
+	{
+		// clear our semaphores and free memory
+		error = memory_clear(&dbs);
+	}
 
 	printf("server stopped\n");
 

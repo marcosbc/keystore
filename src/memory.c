@@ -44,6 +44,7 @@ int memory_init()
 		{
 			fprintf(stderr, "error: couldn't create semaphore \"%s\"\n", SEM_RW);
 		}
+		perror("sem_open");
 		ok = 0;
 	}
 
@@ -95,7 +96,8 @@ void *memory_set(void *info)
 		// create our db if it doesn't exist
 		if(db == NULL)
 		{
-			DEBUG_PRINT("creating db\n");
+			DEBUG_PRINT("*** creating db with name \"%s\", dbs=%p\n",
+			            db_name, dbs);
 			db = create_db(db_name, dbs);
 			DEBUG_PRINT("created db %p\n", db);
 		}
@@ -173,6 +175,16 @@ void *memory_set(void *info)
 
 		// done!
 		memory_write_unlock(sem_rw);
+	}
+	
+	if(sem_rw != (sem_t *) -1)
+	{
+		sem_close(sem_rw);
+	}
+	
+	if(sem_mutex != (sem_t *) -1)
+	{
+		sem_close(sem_mutex);
 	}
 	
 	DEBUG_PRINT("returning thread error %d\n", *error);
@@ -266,6 +278,16 @@ void *memory_get(void *info)
 		// reading done!
 		memory_read_unlock(sem_rw);
 	}
+	
+	if(sem_rw != (sem_t *) -1)
+	{
+		sem_close(sem_rw);
+	}
+	
+	if(sem_mutex != (sem_t *) -1)
+	{
+		sem_close(sem_mutex);
+	}
 
 	DEBUG_PRINT("returning thread error %d\n", *error);
 	pthread_exit(NULL);
@@ -303,11 +325,11 @@ int memory_clear(store_db **dbs)
 int free_tree(store_db **dbs, int *error)
 {
 	int success = 0;
-	sem_t *sem_rw = sem_open(SEM_RW, 0);
-	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
 	store_db **prev_db = NULL;
 	store_entry **entry = NULL;
 	store_entry **prev = NULL;
+	sem_t *sem_rw = sem_open(SEM_RW, 0);
+	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
 
 	if(sem_rw == (sem_t *) -1 || sem_mutex == (sem_t *) -1)
 	{
@@ -323,10 +345,10 @@ int free_tree(store_db **dbs, int *error)
 			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
 			        SEM_RW);
 		}
+		perror("sem_open");
 	}
 	else
 	{
-		
 		memory_write_lock(sem_rw, sem_mutex);
 
 		// see what our dbs contains now
@@ -352,6 +374,16 @@ int free_tree(store_db **dbs, int *error)
 
 		memory_write_unlock(sem_rw);
 		success = 1;
+	}
+	
+	if(sem_rw != (sem_t *) -1)
+	{
+		sem_close(sem_rw);
+	}
+	
+	if(sem_mutex != (sem_t *) -1)
+	{
+		sem_close(sem_mutex);
 	}
 
 	return success;
