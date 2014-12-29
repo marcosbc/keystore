@@ -1,7 +1,0 @@
-# this is a configuration file
-# this line represents a comment, they won't get processed
-# empty lines aren't processed either
-# key=value
-
-# where to store dbs
-dbpath=/Users/Marcos/Dev/SSOO/keystore-store
