@@ -271,7 +271,7 @@ void *memory_get(void *info)
 	pthread_exit(NULL);
 }
 
-int memory_clear()
+int memory_clear(store_db **dbs)
 {
 	int error = 0;
 	
@@ -289,8 +289,75 @@ int memory_clear()
 		fprintf(stderr, "error: couldn't unlink semaphore \"%s\"\n", SEM_MUTEX);
 	}
 
+	if(error == ERR_NONE)
+	{
+		if(! free_tree(dbs, &error))
+		{
+			fprintf(stderr, "memory couldn't be freed\n");
+		}
+	}
+
 	return error;
 }
+
+int free_tree(store_db **dbs, int *error)
+{
+	int success = 0;
+	sem_t *sem_rw = sem_open(SEM_RW, 0);
+	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
+	store_db **prev_db = NULL;
+	store_entry **entry = NULL;
+	store_entry **prev = NULL;
+
+	if(sem_rw == (sem_t *) -1 || sem_mutex == (sem_t *) -1)
+	{
+		*error = ERR_MEM_SEMOPEN;
+		if(sem_mutex == (sem_t *) -1)
+		{
+			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
+			        SEM_MUTEX);
+		}
+	
+		if(sem_rw == (sem_t *) -1)
+		{
+			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
+			        SEM_RW);
+		}
+	}
+	else
+	{
+		
+		memory_write_lock(sem_rw, sem_mutex);
+
+		// see what our dbs contains now
+		while(*dbs != NULL)
+		{
+			entry = &((*dbs)->ent);
+			while(*entry != NULL)
+			{
+				// free it's value
+				free((*entry)->val);
+				prev = entry;
+				entry = &((*entry)->next);
+			
+				// go to the next one
+				free(*prev);
+				*prev = NULL;
+			}
+	
+			prev_db = dbs;
+			dbs = &((*dbs)->next);
+			free(*prev_db);
+		}
+
+		memory_write_unlock(sem_rw);
+		success = 1;
+	}
+
+	return success;
+}
+
+
 
 void memory_read_lock(sem_t *sem)
 {

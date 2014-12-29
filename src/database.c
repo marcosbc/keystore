@@ -75,42 +75,12 @@ store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 // db?
 store_db *locate_db(char *name, store_db *db)
 {
-	while(db != NULL && 0 != strncmp(name, db->name,
-	                                 (size_t) min((int) strlen(name),
-									              MAX_DB_SIZE)))
+	while(db != NULL && 0 != strncmp(name, db->name, MAX_DB_SIZE))
 	{
 		db = db->next;
 	}
 
 	return db;
-}
-
-void free_tree(store_db **dbs)
-{
-	store_db **prev_db = NULL;
-	store_entry **entry = NULL;
-	store_entry **prev = NULL;
-
-	// see what our dbs contains now
-	while(*dbs != NULL)
-	{
-		entry = &((*dbs)->ent);
-		while(*entry != NULL)
-		{
-			// free it's value
-			free((*entry)->val);
-			prev = entry;
-			entry = &((*entry)->next);
-			
-			// go to the next one
-			free(*prev);
-			*prev = NULL;
-		}
-
-		prev_db = dbs;
-		dbs = &((*dbs)->next);
-		free(*prev_db);
-	}
 }
 
 #ifdef __DEBUG__

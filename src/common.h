@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define __DEBUG__
+// #define __DEBUG__
 #ifdef __DEBUG__
 #define DEBUG_PRINT(...) { fprintf(stderr, __VA_ARGS__); }
 #else
