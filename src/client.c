@@ -152,6 +152,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	// initialize our socket
 	if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 	{
+		DEBUG_PRINT("error at socket creation\n");
 		error = ERR_SOCKETCREATE;
 	}
 	// connect to socket
@@ -170,6 +171,8 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	}
 	else
 	{
+		DEBUG_PRINT("copy key and dbs\n");
+
 		// correct key and dbs variable's size
 		strncpy(key_corrected, key, MAX_KEY_SIZE - 1);
 		key_corrected[MAX_VAL_SIZE - 1] = '\0';

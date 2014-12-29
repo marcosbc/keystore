@@ -11,10 +11,10 @@
 
 void store_stop();
 store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
-                          char *dbs, store_info **store);
-store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
-                         store_info *store);
-int store_server_act(int s, store_info **store);
+                          char *db_names, store_db **dbs);
+store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
+                         store_db *dbs);
+int store_server_act(int s, store_db **dbs);
 int store_server_init();
 
 #endif

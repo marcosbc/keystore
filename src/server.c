@@ -10,8 +10,7 @@
 #include <sys/socket.h> // socket related things
 #include <sys/un.h> // socket related things
 #include <sys/stat.h> // mkfifo
-#include <sys/times.h>
-#include <time.h>
+#include <sys/timeb.h> 
 #include <unistd.h> // fork
 #include <pthread.h>
 #include <fcntl.h> // O_CREAT, ...
@@ -31,7 +30,7 @@ void store_stop()
 
 // TODO: add fork
 store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
-                         char *dbs, store_info **store)
+                         char *db_names, store_db **dbs)
 {
 	/** ERRORS **/
 
@@ -69,11 +68,11 @@ store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			DEBUG_PRINT("setting value\n");
 			ent_inf[i].value = val;
 			DEBUG_PRINT("setting dbname\n");
-			ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
+			ent_inf[i].db_name = db_names + i * MAX_DB_SIZE;
 			DEBUG_PRINT("setting entry\n");
 			ent_inf[i].entry = NULL;
-			DEBUG_PRINT("setting store->dbs\n");
-			ent_inf[i].dbs = &((*store)->dbs);
+			DEBUG_PRINT("setting dbs\n");
+			ent_inf[i].dbs = dbs;
 			DEBUG_PRINT("setting error\n");
 			ent_inf[i].error = 0;
 			DEBUG_PRINT("creating thread\n");
@@ -120,12 +119,12 @@ returned value %d\n",
 				if(entries[i] == NULL)
 				{
 					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
-					            dbs + i*MAX_DB_SIZE, key);
+					            db_names + i*MAX_DB_SIZE, key);
 				}
 				else
 				{
 					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
-					            dbs + i*MAX_DB_SIZE, entries[i]->key,
+					            db_names + i*MAX_DB_SIZE, entries[i]->key,
 								entries[i]->val);
 				}
 			}
@@ -138,8 +137,8 @@ returned value %d\n",
 	return entries;
 }
 
-store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
-                         store_info *store)
+store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
+                         store_db *dbs)
 {
 	int err = 0;
 	int i;
@@ -151,7 +150,7 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 	DEBUG_PRINT("notice: supplied key \"%s\", num_dbs %d\n",
 	            key, num_dbs);
 
-	if(store->dbs == NULL)
+	if(dbs == NULL)
 	{
 		err = ERR_DB;
 	}
@@ -170,9 +169,9 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 			// create the entry information for setting
 			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
 			ent_inf[i].value = NULL;
-			ent_inf[i].db_name = dbs + i * MAX_DB_SIZE;
+			ent_inf[i].db_name = db_names + i * MAX_DB_SIZE;
 			ent_inf[i].entry = NULL;
-			ent_inf[i].dbs = &(store->dbs);
+			ent_inf[i].dbs = &dbs;
 			ent_inf[i].error = 0;
 
 			// create our thread -> ERROR???
@@ -217,12 +216,12 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 				if(entries[i] == NULL)
 				{
 					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
-					            dbs + i*MAX_DB_SIZE, entries[i]->key);
+					            db_names + i*MAX_DB_SIZE, entries[i]->key);
 				}
 				else
 				{
 					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
-					            dbs + i*MAX_DB_SIZE, entries[i]->key,
+					            db_names + i*MAX_DB_SIZE, entries[i]->key,
 								entries[i]->val);
 				}
 			}
@@ -235,11 +234,9 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 	return entries;
 }
 
-int store_server_act(int s, store_info **store)
+int store_server_act(int s, store_db **dbs)
 {
-	long ticks_per_sec = sysconf(_SC_CLK_TCK);
-	struct tms start_tm, end_tm;
-	clock_t t_start, t_end;
+	struct timeb start_tm, end_tm;
 	int error = 0;
 	int client_s = -1; // remote socket
 	struct sockaddr_un client;
@@ -247,7 +244,7 @@ int store_server_act(int s, store_info **store)
 	char mode;
 	char key[MAX_VAL_SIZE];
 	int num_dbs; // 32-bit and 64-bit intercompatibility
-	char *dbs = NULL;
+	char *db_names = NULL;
 	int val_len = 0; // 32-bit and 64-bit intercompatibility
 	char *val = NULL;
 	store_entry **result = (store_entry **) -1;
@@ -262,13 +259,13 @@ int store_server_act(int s, store_info **store)
 		printf("connection incoming\n");
 
 		// init our start time
-		t_start = times(&start_tm);
+		ftime(&start_tm);
 		DEBUG_PRINT("has t_start\n");
 	
 		#ifdef __DEBUG__
-		if((*store)->dbs != NULL)
+		if(*dbs != NULL)
 		{
-			print_existing_databases((*store)->dbs);
+			print_existing_databases(*dbs);
 		}
 		#endif
 
@@ -288,19 +285,19 @@ int store_server_act(int s, store_info **store)
 			write(client_s, STORE_ACK, STORE_ACK_LEN);
 			DEBUG_PRINT("got num_dbs \"%d\" from client\n", num_dbs);
 			
-			dbs = (char *) malloc(num_dbs * MAX_DB_SIZE * sizeof(char));
-			if(dbs == NULL)
+			db_names = (char *) malloc(num_dbs * MAX_DB_SIZE * sizeof(char));
+			if(db_names == NULL)
 			{
 				perror("malloc");
 				error = ERR_ALLOC;
 			}
 			else
 			{
-				read(client_s, dbs, num_dbs * MAX_DB_SIZE * sizeof(char));
+				read(client_s, db_names, num_dbs * MAX_DB_SIZE * sizeof(char));
 				for(i = 0; i < num_dbs; i++)
 				{
 					DEBUG_PRINT("got dbs[%d] \"%s\" from client\n", i,
-					            dbs + i*MAX_DB_SIZE);
+					            db_names + i*MAX_DB_SIZE);
 				}
 
 				// if we're setting a value, we must also read it
@@ -334,7 +331,7 @@ int store_server_act(int s, store_info **store)
 
 						DEBUG_PRINT("proceeding to write\n");
 						// now that we have everything, call function for setting
-						result = store_write(key, val, num_dbs, dbs, store);
+						result = store_write(key, val, num_dbs, db_names, dbs);
 
 						// send the result pointer address to our receiver
 					}
@@ -346,16 +343,17 @@ int store_server_act(int s, store_info **store)
 					
 					DEBUG_PRINT("proceeding to read\n");
 					// now that we have everything, call function for setting
-					result = store_read(key, num_dbs, dbs, *store);
+					result = store_read(key, num_dbs, db_names, *dbs);
 
 					DEBUG_PRINT("got result %p\n", result);
 
 					// send the result
-					for(i = 0; i < num_dbs && result != NULL; i++)
+					for(i = 0; i < num_dbs; i++)
 					{
 						DEBUG_PRINT("\nWRITE ITERATION %d\n", i);
 
-						if(result[i] != NULL)
+						// if we found an entry, write it
+						if(result != NULL && result[i] != NULL)
 						{
 							val_len = (int) strlen(result[i]->val);
 							DEBUG_PRINT("writing val len %d\n", val_len);
@@ -369,7 +367,8 @@ int store_server_act(int s, store_info **store)
 							read(client_s, &ack_buff, STORE_ACK_LEN);
 							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
 						}
-						// if we didn't find it, return an empty string
+						// we want to send a response even if the "result"
+						// variable is null
 						else
 						{
 							val_len = 0;
@@ -399,9 +398,10 @@ int store_server_act(int s, store_info **store)
 		close(client_s);
 
 		// init our start time
-		t_end = times(&end_tm);
-		printf("connection closed after %7.4f ms\n",
-		       (float) 1000 * (t_end - t_start) / ticks_per_sec);
+		ftime(&end_tm);
+		printf("connection closed after %.2f ms\n",
+		       (float) 1000.0 * (end_tm.time - start_tm.time)
+			           + (end_tm.millitm - start_tm.millitm));
 	}
 
 	return error;
@@ -415,9 +415,10 @@ int store_server_init()
 	struct sigaction act;
 	int s = -1; // our socket
 	struct sockaddr_un addr;
-	store_info *store = NULL;
 	int len;
 	char sock_path[MAX_SOCK_PATH_SIZE];
+	store_db *dbs = NULL;
+	store_info *store = NULL; // shared memory to store public configuration
 
 	// set up our socket path
 	getcwd(sock_path, sizeof(sock_path));
@@ -443,7 +444,7 @@ int store_server_init()
 	signal(SIGPIPE, SIG_IGN);
 	
 	// create our root db
-	shmid = shmget(shm_key, sizeof(struct info), IPC_CREAT | IPC_EXCL | 0666);
+	shmid = shmget(shm_key, sizeof(struct info), IPC_CREAT | IPC_EXCL | 0664);
 
 	// we shouldn't be able to initialize memory when it has already been done
 	if(-1 == shmid)
@@ -482,19 +483,20 @@ int store_server_init()
 	}
 	else
 	{
-		// create additional semaphores and initiate our store db
+		// set public configuration info in our shared memory
 		store->pid = getpid();
-		store->dbs = NULL;
+		store->ack_len = STORE_ACK_LEN;
+		strcpy(store->ack_msg, STORE_ACK);
 		
 		// *** import our file system data ***
-		// store->dbs = store_import();
+		// dbs = store_import();
 
 		// daemon
 		printf("database running...\n");
 		while(! stop_server)
 		{
-			DEBUG_PRINT("\n\nnotice: iteration with store %p\n", store);
-			error = store_server_act(s, &store);
+			DEBUG_PRINT("\n\nnotice: iteration with db %p\n", dbs);
+			error = store_server_act(s, &dbs);
 		}
 
 		printf("stopping server...\n");
@@ -516,16 +518,21 @@ int store_server_init()
 	}
 
 	// unmap our shared memory
-	if(error != ERR_STORE_SHMLOAD && -1 == shmdt(store))
+	// please note the error comparison is placed after on purpose,
+	// so the error won't be rewritten but the memory is shared if needed
+	if(-1 == shmdt(store) && error != ERR_STORE_SHMLOAD)
 	{
 		error = ERR_STORE_SHMDT;
 	}
 
 	// now that we're done, remove the shared memory
-	if(error != ERR_STORE_SHMCREATE && -1 == shmctl(shmid, IPC_RMID, NULL))
+	if(-1 == shmctl(shmid, IPC_RMID, NULL) && error != ERR_STORE_SHMCREATE)
 	{
 		error = ERR_STORE_SHMCTL;
 	}
+
+	// free space
+	free_tree(&dbs);
 
 	printf("server stopped\n");
 

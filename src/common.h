@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// #define __DEBUG__
+#define __DEBUG__
 #ifdef __DEBUG__
 #define DEBUG_PRINT(...) { fprintf(stderr, __VA_ARGS__); }
 #else
@@ -110,7 +110,8 @@ typedef struct db {
 // for extracting info from shared memory
 typedef struct info {
 	pid_t pid;
-	struct db *dbs;
+	int ack_len;
+	char ack_msg[STORE_ACK_LEN];
 } store_info;
 
 // for get and set operations

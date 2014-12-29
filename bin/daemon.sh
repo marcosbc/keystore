@@ -1,10 +1,14 @@
 #!/bin/bash
+LOGS_DIR=logs
 DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )
-cd $DIR;
-rm ./keystore_server.sock;
-make;
-./bin/keystored;
-cd -;
+SOCKET=$DIR/keystore_server.sock
 
-# also clean ipcs (THIS IS A DEBUG FEATURE)
-ipcs | grep "^m " | awk '{ print $2 }' | xargs ipcrm -m;
+cd $DIR
+
+if [ ! -d $LOGS_DIR ]
+then
+	mkdir $LOGS_DIR
+fi
+
+./bin/clear_memory 2>> $LOGS_DIR/error.log
+./bin/keystored >> $LOGS_DIR/access.log 2>> $LOGS_DIR/error.log &

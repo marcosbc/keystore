@@ -85,6 +85,34 @@ store_db *locate_db(char *name, store_db *db)
 	return db;
 }
 
+void free_tree(store_db **dbs)
+{
+	store_db **prev_db = NULL;
+	store_entry **entry = NULL;
+	store_entry **prev = NULL;
+
+	// see what our dbs contains now
+	while(*dbs != NULL)
+	{
+		entry = &((*dbs)->ent);
+		while(*entry != NULL)
+		{
+			// free it's value
+			free((*entry)->val);
+			prev = entry;
+			entry = &((*entry)->next);
+			
+			// go to the next one
+			free(*prev);
+			*prev = NULL;
+		}
+
+		prev_db = dbs;
+		dbs = &((*dbs)->next);
+		free(*prev_db);
+	}
+}
+
 #ifdef __DEBUG__
 void print_databases(int num_dbs, char *dbs[])
 {
