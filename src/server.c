@@ -60,7 +60,7 @@ store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 		DEBUG_PRINT("alloc ok \n");
 
 		// parent - alter the database in memory
-		for(; i < num_dbs && ! therr && err == ERR_NONE; i++)
+		for(; i < num_dbs && ! therr; i++)
 		{
 			DEBUG_PRINT("setting key\n");
 			// create the entry information for setting
@@ -98,8 +98,7 @@ store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 		therr = 0;
 		
 		// now, end our threads
-		for(i = 0; i < num_dbs && therr == ERR_NONE && err == ERR_NONE;
-		    i++)
+		for(i = 0; i < num_dbs && ! therr; i++)
 		{
 			DEBUG_PRINT("notice: [parent] ending thread#parent-%d %d...\n",
 			            i, (int) thids[i]);
@@ -166,7 +165,7 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 	}
 	else
 	{
-		for(i = 0; i < num_dbs && ! therr && err == ERR_NONE; i++)
+		for(i = 0; i < num_dbs && ! therr; i++)
 		{
 			// create the entry information for setting
 			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
@@ -195,11 +194,12 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *dbs,
 		num_dbs = i;
 
 		// end our threads
-		for(i = 0; i < num_dbs && err == ERR_NONE; i++)
+		for(i = 0; i < num_dbs && ! therr; i++)
 		{
 			DEBUG_PRINT("notice: ending thread#%d %d...\n",
 			            i, (int) thids[i]);
-	
+
+			// finish in order
 			therr = pthread_join(thids[i], NULL);
 
 			if(therr != 0)
