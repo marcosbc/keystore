@@ -19,7 +19,7 @@
 #include "disk.h"
 #include "database.h"
 
-int store_set(char key[], char value[], int num_dbs, char *dbs[])
+int store_set(char key[], char *value, int num_dbs, char *dbs[])
 {
 	int error = 0;
 	char mode = STORE_MODE_SET;
@@ -57,7 +57,7 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	}
 	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * MAX_DB_SIZE,
 	                                                 sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) calloc(strlen(key),
+	       (NULL == (key_corrected = (char *) calloc(MAX_KEY_SIZE,
 	                                                 sizeof(char)))))
 	{
 		error = ERR_ALLOC;
@@ -163,7 +163,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	}
 	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * MAX_DB_SIZE,
 	                                                 sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) calloc(strlen(key),
+	       (NULL == (key_corrected = (char *) calloc(MAX_KEY_SIZE,
 	                                                 sizeof(char)))))
 	{
 		error = ERR_ALLOC;

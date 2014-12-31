@@ -24,7 +24,17 @@ int memory_init()
 	sem_t *sem_mutex, *sem_rw;
 	
 	DEBUG_PRINT("notice: creating semaphores for memory operations\n");
-	
+
+	if((sem_t *) -1 != (sem_mutex = sem_open(SEM_MUTEX, 0)))
+	{
+		sem_close(sem_mutex);
+	}
+
+	if((sem_t *) -1 != (sem_rw = sem_open(SEM_RW, 0)))
+	{
+		sem_close(sem_rw);
+	}
+
 	// if we don't unlink them, they give problems
 	sem_unlink(SEM_MUTEX);
 	sem_unlink(SEM_RW);
@@ -72,13 +82,13 @@ void *memory_set(void *info)
 		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
-			print_error("couldn't open semaphore \"%s\"\n",
+			print_error("couldn't create semaphore \"%s\"\n",
 			        SEM_MUTEX);
 		}
 	
 		if(sem_rw == (sem_t *) -1)
 		{
-			print_error("couldn't open semaphore \"%s\"\n", SEM_RW);
+			print_error("couldn't create semaphore \"%s\"\n", SEM_RW);
 		}
 	}
 	else

@@ -25,7 +25,7 @@ void store_write(struct current_entry_info *info);
 void store_read(struct current_entry_info *info);
 void store_decide();
 int store_init();
-int store_set(char key[], char value[], int num_dbs, char *dbs[]);
+int store_set(char key[], char *value, int num_dbs, char *dbs[]);
 int store_get(char key[], int num_dbs, char *dbs[]);
 int store_halt();
 

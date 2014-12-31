@@ -25,6 +25,8 @@ int stop_server = 0; // for signals to work
 
 void store_stop()
 {
+	// inform the user why the database was stopped
+	// shmkey = ...
 	stop_server = 1;
 }
 
@@ -433,6 +435,9 @@ int store_server_init()
 	addr.sun_family = AF_UNIX;
 	strcpy(addr.sun_path, sock_path);
 	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
+	
+	// unlink our socket so we don't get errors if it is already created
+	unlink(sock_path);
 
 	// set up signal to stop server correctly
 	act.sa_handler = store_stop;
@@ -445,6 +450,16 @@ int store_server_init()
 
 	// ignore our sigpipe signal
 	signal(SIGPIPE, SIG_IGN);
+
+	if(-1 != (shmid = shmget(shm_key, sizeof(struct info), 0664))
+	   && (store_info *) -1 != (store = shmat(shmid, NULL, 0)))
+	{
+		// kill our previous server
+		store->shutdown_reason = SHUTDOWN_NEWSESSION;
+		kill(store->pid, SIGINT);
+		shmctl(shmid, IPC_RMID, NULL);
+		shmdt(store);
+	}
 	
 	// create our root db
 	shmid = shmget(shm_key, sizeof(struct info), IPC_CREAT | IPC_EXCL | 0664);
@@ -490,6 +505,12 @@ int store_server_init()
 		store->pid = getpid();
 		store->ack_len = STORE_ACK_LEN;
 		strcpy(store->ack_msg, STORE_ACK);
+		store->max_sock_len = MAX_SOCK_PATH_SIZE;
+		strcpy(store->sock_path, STORE_SOCKET_PATH);
+		store->max_key_len = MAX_KEY_SIZE;
+		store->max_val_len = MAX_VAL_SIZE;
+		store->max_db_len = MAX_DB_SIZE;
+		store->shutdown_reason = SHUTDOWN_UNDEFINED;
 		
 		// *** import our file system data ***
 		// dbs = store_import();

@@ -95,6 +95,10 @@
 #define MAX_SOCK_PATH_SIZE 100
 #define STORE_SOCKET_PATH "keystore_server.sock"
 
+// socket shutdown reasons
+#define SHUTDOWN_UNDEFINED  'u'
+#define SHUTDOWN_NEWSESSION 'n'
+
 // entry type
 typedef struct entry {
 	char key[MAX_KEY_SIZE];
@@ -115,10 +119,12 @@ typedef struct info {
 	pid_t pid;
 	int ack_len;
 	char ack_msg[STORE_ACK_LEN];
+	int max_sock_len;
 	char sock_path[MAX_SOCK_PATH_SIZE];
 	int max_key_len;
 	int max_val_len;
 	int max_db_len;
+	char shutdown_reason;
 } store_info;
 
 // for get and set operations
