@@ -29,25 +29,22 @@ void store_stop()
 }
 
 // TODO: add fork
-store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
-                         char *db_names, store_db **dbs)
+int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
+                char *db_names, store_db **dbs, store_entry ***entries)
 {
-	/** ERRORS **/
-
 	int err = 0;
 	int i = 0;
 	// pid_t pid;
 	int therr = 0;
 	pthread_t *thids = NULL;
 	struct entry_inf *ent_inf = NULL;
-	store_entry **entries = NULL;
 	// FILE **fids = NULL;
 
 	DEBUG_PRINT("notice: supplied key \"%s\", value \"%s\", num_dbs %d\n",
 	            key, val, num_dbs);
 
-	if(NULL == (entries = (store_entry **) calloc(num_dbs,
-	                                              sizeof(store_entry *)))
+	if(NULL == (*entries = (store_entry **) calloc(num_dbs,
+	                                               sizeof(store_entry *)))
 	|| NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
 	                                                  sizeof(struct entry_inf)))
 	|| NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
@@ -57,7 +54,7 @@ store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 	else
 	{
 		DEBUG_PRINT("alloc ok, entries=%p ent_inf=%p thids=%p\n",
-		            entries, ent_inf, thids);
+		            *entries, ent_inf, thids);
 
 		// parent - alter the database in memory
 		for(; i < num_dbs && ! therr; i++)
@@ -111,13 +108,13 @@ store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			}
 			else
 			{
-				entries[i] = ent_inf[i].entry;
+				(*entries)[i] = ent_inf[i].entry;
 				err = ent_inf[i].error;
 				DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d \
 returned value %d\n",
 			                i, (int) thids[i], ent_inf[i].error);
 
-				if(entries[i] == NULL)
+				if((*entries)[i] == NULL)
 				{
 					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
 					            db_names + i*MAX_DB_SIZE, key);
@@ -125,8 +122,8 @@ returned value %d\n",
 				else
 				{
 					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
-					            db_names + i*MAX_DB_SIZE, entries[i]->key,
-								entries[i]->val);
+					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key,
+								(*entries)[i]->val);
 				}
 			}
 		}
@@ -136,18 +133,17 @@ returned value %d\n",
 		free(thids);
 	}
 
-	return entries;
+	return err;
 }
 
-store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
-                         store_db *dbs)
+int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
+               store_db *dbs, store_entry ***entries)
 {
 	int err = 0;
 	int i;
 	int therr = 0;
 	pthread_t *thids = NULL;
 	struct entry_inf *ent_inf = NULL;
-	store_entry **entries = NULL;
 
 	DEBUG_PRINT("notice: supplied key \"%s\", num_dbs %d\n",
 	            key, num_dbs);
@@ -156,7 +152,7 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 	{
 		err = ERR_DB;
 	}
-	else if(NULL == (entries = (store_entry **) calloc(num_dbs,
+	else if(NULL == (*entries = (store_entry **) calloc(num_dbs,
 	                                                   sizeof(store_entry *)))
 	     || NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
 	                                                sizeof(struct entry_inf)))
@@ -210,21 +206,21 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 			}
 			else
 			{
-				entries[i] = ent_inf[i].entry;
+				(*entries)[i] = ent_inf[i].entry;
 				err = ent_inf[i].error;
 				DEBUG_PRINT("notice: ended thread#%d %d, returned %d\n",
 				            i, (int) thids[i], err);
 
-				if(entries[i] == NULL)
+				if((*entries)[i] == NULL)
 				{
 					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
-					            db_names + i*MAX_DB_SIZE, entries[i]->key);
+					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key);
 				}
 				else
 				{
 					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
-					            db_names + i*MAX_DB_SIZE, entries[i]->key,
-								entries[i]->val);
+					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key,
+								(*entries)[i]->val);
 				}
 			}
 		}
@@ -234,7 +230,7 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 	free(thids);
 	free(ent_inf);
 
-	return entries;
+	return err;
 }
 
 int store_server_act(int s, store_db **dbs)
@@ -250,7 +246,7 @@ int store_server_act(int s, store_db **dbs)
 	char *db_names = NULL;
 	int val_len = 0; // 32-bit and 64-bit intercompatibility
 	char *val = NULL;
-	store_entry **result = (store_entry **) -1;
+	store_entry **result = (store_entry **) NULL;
 	int i = 0;
 	char ack_buff[STORE_ACK_LEN];
 	
@@ -325,8 +321,6 @@ int store_server_act(int s, store_db **dbs)
 					}
 					else
 					{
-						/** PLEASE LOOK */
-						
 						// ack is not needed here, since we'll return a result
 						/* val_len = */read(client_s, val, val_len * sizeof(char));
 						val[val_len] = '\0'; // ensure we reach end of string
@@ -334,7 +328,8 @@ int store_server_act(int s, store_db **dbs)
 
 						DEBUG_PRINT("proceeding to write\n");
 						// now that we have everything, call function for setting
-						result = store_write(key, val, num_dbs, db_names, dbs);
+						/* error = */ store_write(key, val, num_dbs, db_names,
+						                          dbs, &result);
 						
 						// and finished, since we don't respond to set reqs
 					}
@@ -346,9 +341,10 @@ int store_server_act(int s, store_db **dbs)
 					
 					DEBUG_PRINT("proceeding to read\n");
 					// now that we have everything, call function for setting
-					result = store_read(key, num_dbs, db_names, *dbs);
+					/* error = */ store_read(key, num_dbs, db_names, *dbs,
+					                         &result);
 
-					DEBUG_PRINT("got result %p\n", result);
+					DEBUG_PRINT("got result %p\n", &result);
 
 					// send the result
 					for(i = 0; i < num_dbs; i++)
@@ -358,6 +354,7 @@ int store_server_act(int s, store_db **dbs)
 						// if we found an entry, write it
 						if(result != NULL && result[i] != NULL)
 						{
+							DEBUG_PRINT("going for iteration\n");
 							val_len = (int) strlen(result[i]->val);
 							DEBUG_PRINT("writing val len %d\n", val_len);
 							write(client_s, &val_len, sizeof(int));
