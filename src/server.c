@@ -56,7 +56,8 @@ store_entry **store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 	}
 	else
 	{
-		DEBUG_PRINT("alloc ok \n");
+		DEBUG_PRINT("alloc ok, entries=%p ent_inf=%p thids=%p\n",
+		            entries, ent_inf, thids);
 
 		// parent - alter the database in memory
 		for(; i < num_dbs && ! therr; i++)
@@ -130,6 +131,7 @@ returned value %d\n",
 			}
 		}
 
+		DEBUG_PRINT("freeing ent_inf=%p thids=%p\n", ent_inf, thids);
 		free(ent_inf);
 		free(thids);
 	}
@@ -228,6 +230,7 @@ store_entry **store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 		}
 	}
 
+	DEBUG_PRINT("freeing ent_inf=%p thids=%p\n", ent_inf, thids);
 	free(thids);
 	free(ent_inf);
 
@@ -242,7 +245,7 @@ int store_server_act(int s, store_db **dbs)
 	struct sockaddr_un client;
 	socklen_t client_len = sizeof(client);
 	char mode;
-	char key[MAX_VAL_SIZE];
+	char key[MAX_KEY_SIZE];
 	int num_dbs; // 32-bit and 64-bit intercompatibility
 	char *db_names = NULL;
 	int val_len = 0; // 32-bit and 64-bit intercompatibility
@@ -277,7 +280,7 @@ int store_server_act(int s, store_db **dbs)
 		if(mode == STORE_MODE_SET || mode == STORE_MODE_GET)
 		{
 			DEBUG_PRINT("setting or getting mode\n");
-			read(client_s, &key, MAX_VAL_SIZE * sizeof(char));
+			read(client_s, &key, MAX_KEY_SIZE * sizeof(char));
 			write(client_s, STORE_ACK, STORE_ACK_LEN);
 			DEBUG_PRINT("got key \"%s\" from client\n", key);
 
@@ -285,10 +288,10 @@ int store_server_act(int s, store_db **dbs)
 			write(client_s, STORE_ACK, STORE_ACK_LEN);
 			DEBUG_PRINT("got num_dbs \"%d\" from client\n", num_dbs);
 			
-			db_names = (char *) malloc(num_dbs * MAX_DB_SIZE * sizeof(char));
+			db_names = (char *) calloc(num_dbs * MAX_DB_SIZE, sizeof(char));
 			if(db_names == NULL)
 			{
-				perror("malloc");
+				print_perror("calloc");
 				error = ERR_ALLOC;
 			}
 			else
@@ -313,11 +316,11 @@ int store_server_act(int s, store_db **dbs)
 
 					// we don't know how big our value will be
 					// val_len + 1 -> we must allow the \0 to be the last char
-					val = (char *) malloc((val_len + 1) * sizeof(char));
+					val = (char *) calloc((val_len + 1), sizeof(char));
 			
 					if(val == NULL)
 					{
-						perror("malloc");
+						print_perror("calloc");
 						error = ERR_ALLOC;
 					}
 					else
@@ -332,8 +335,8 @@ int store_server_act(int s, store_db **dbs)
 						DEBUG_PRINT("proceeding to write\n");
 						// now that we have everything, call function for setting
 						result = store_write(key, val, num_dbs, db_names, dbs);
-
-						// send the result pointer address to our receiver
+						
+						// and finished, since we don't respond to set reqs
 					}
 				}
 				// 'get' mode
@@ -386,6 +389,9 @@ int store_server_act(int s, store_db **dbs)
 						DEBUG_PRINT("---DONE---\n\n");
 					}
 				}
+				DEBUG_PRINT("clearing result %p\n", result);
+				free(result);
+				result = NULL;
 			}
 		}
 		// formal server stop so no error
@@ -458,11 +464,11 @@ int store_server_init()
 	else if(! memory_init())
 	{
 		error = ERR_MEM_SEMOPEN;
-		perror("sem_open");
+		print_perror("sem_open");
 	}
 	else if(NULL != fopen(sock_path, "r"))
 	{
-		fprintf(stderr, "error: socket connection already exists");
+		print_error("socket connection already exists");
 		error = ERR_SOCKETEXIST;
 	}
 	// create our socket
@@ -473,12 +479,12 @@ int store_server_init()
 	// bind socket to file
 	else if (bind(s, (struct sockaddr *) &addr, len) < 0)
 	{
-		perror("bind");
+		print_perror("bind");
 		error = ERR_BIND;
 	}
 	else if(listen(s, 5) < 0)
 	{
-		perror("listen");
+		print_perror("listen");
 		error = ERR_LISTEN;
 	}
 	else

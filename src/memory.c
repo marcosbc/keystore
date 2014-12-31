@@ -37,14 +37,13 @@ int memory_init()
 	{
 		if(sem_mutex == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't create semaphore \"%s\"\n",
-			        SEM_MUTEX);
+			print_error("couldn't create semaphore \"%s\"\n", SEM_MUTEX);
 		}
 		if(sem_rw == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't create semaphore \"%s\"\n", SEM_RW);
+			print_error("couldn't create semaphore \"%s\"\n", SEM_RW);
 		}
-		perror("sem_open");
+		print_perror("sem_open");
 		ok = 0;
 	}
 
@@ -73,14 +72,13 @@ void *memory_set(void *info)
 		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
+			print_error("couldn't open semaphore \"%s\"\n",
 			        SEM_MUTEX);
 		}
 	
 		if(sem_rw == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
-			        SEM_RW);
+			print_error("couldn't open semaphore \"%s\"\n", SEM_RW);
 		}
 	}
 	else
@@ -119,7 +117,7 @@ void *memory_set(void *info)
 			if(entry != NULL)
 			{
 				// yes, so free the previous one
-				DEBUG_PRINT("yes, free val\n");
+				DEBUG_PRINT("yes, free val %p\n", entry->val);
 				free(entry->val);
 				entry->val = NULL;
 			}
@@ -138,21 +136,31 @@ void *memory_set(void *info)
 
 			if(*error == ERR_NONE)
 			{
-				entry->val = (char *) malloc(val_len * sizeof(char));
+				// if we have set a value limit, apply it
+				if(MAX_VAL_SIZE <= 0)
+				{
+					val_len = strlen(value) + 1;
+				}
+				else
+				{
+					val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
+				}
+				DEBUG_PRINT("reserving val %s, len %d\n", value, val_len);
+				entry->val = (char *) calloc(val_len, sizeof(char));
 					
 				if(entry->val == NULL)
 				{
 					*error = ERR_ALLOC;
 				}
-				DEBUG_PRINT("have entry now, adding value\n");
+				DEBUG_PRINT("have entry now, adding value (MAX_LEN=%d)\n",
+				            MAX_VAL_SIZE);
 				
-				val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
 				strncpy(entry->val, value, val_len);
 				entry->val[val_len - 1] = '\0';
 
 				DEBUG_PRINT("notice: [child, memory] setting in db \"%s\" key \
-\"%s\", value \"%s\" is DONE\n",
-				            db_name, entry->key, entry->val);
+\"%s\", value \"%s\" and val_len \"%d\" is DONE\n",
+				            db_name, entry->key, entry->val, val_len);
 
 				// save the entry to our info variable (as output)
 				((struct entry_inf *) info)->entry = entry;
@@ -210,14 +218,12 @@ void *memory_get(void *info)
 		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
-			        SEM_MUTEX);
+			print_error("couldn't open semaphore \"%s\"\n", SEM_MUTEX);
 		}
 	
 		if(sem_rw == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
-			        SEM_RW);
+			print_error("couldn't open semaphore \"%s\"\n", SEM_RW);
 		}
 	}
 	else
@@ -236,8 +242,8 @@ void *memory_get(void *info)
 		{
 			*error = ERR_ENTRY;
 		}
-		else if(NULL == (value = (char *) malloc((strlen(ent->val) + 1)
-		                                         * sizeof(char))))
+		else if(NULL == (value = (char *) calloc((strlen(ent->val) + 1),
+		                                         sizeof(char))))
 		{
 			*error = ERR_ALLOC;
 		}
@@ -299,24 +305,21 @@ int memory_clear(store_db **dbs)
 	
 	DEBUG_PRINT("notice: unlinking semaphores\n");
 
+	if(! free_tree(dbs, &error))
+	{
+		print_error("memory couldn't be freed\n");
+	}
+
 	if(-1 == sem_unlink(SEM_MUTEX))
 	{
 		error = ERR_MEM_SEMUNLINK;
-		fprintf(stderr, "error: couldn't unlink semaphore \"%s\"\n", SEM_RW);
+		print_error("couldn't unlink semaphore \"%s\"\n", SEM_RW);
 	}
 
 	if(-1 == sem_unlink(SEM_RW))
 	{
 		error = ERR_MEM_SEMUNLINK;
-		fprintf(stderr, "error: couldn't unlink semaphore \"%s\"\n", SEM_MUTEX);
-	}
-
-	if(error == ERR_NONE)
-	{
-		if(! free_tree(dbs, &error))
-		{
-			fprintf(stderr, "memory couldn't be freed\n");
-		}
+		print_error("couldn't unlink semaphore \"%s\"\n", SEM_MUTEX);
 	}
 
 	return error;
@@ -325,9 +328,10 @@ int memory_clear(store_db **dbs)
 int free_tree(store_db **dbs, int *error)
 {
 	int success = 0;
-	store_db **prev_db = NULL;
-	store_entry **entry = NULL;
-	store_entry **prev = NULL;
+	store_db *prev_db = NULL;
+	store_db *iterator = NULL;
+	store_entry *entry = NULL;
+	store_entry *prev = NULL;
 	sem_t *sem_rw = sem_open(SEM_RW, 0);
 	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
 
@@ -336,42 +340,49 @@ int free_tree(store_db **dbs, int *error)
 		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
+			print_error("couldn't open semaphore \"%s\"\n",
 			        SEM_MUTEX);
 		}
 	
 		if(sem_rw == (sem_t *) -1)
 		{
-			fprintf(stderr, "error: couldn't open semaphore \"%s\"\n",
+			print_error("couldn't open semaphore \"%s\"\n",
 			        SEM_RW);
 		}
-		perror("sem_open");
+		print_perror("sem_open");
 	}
 	else
 	{
 		memory_write_lock(sem_rw, sem_mutex);
+		iterator = *dbs;
 
 		// see what our dbs contains now
-		while(*dbs != NULL)
+		while(iterator != NULL)
 		{
-			entry = &((*dbs)->ent);
-			while(*entry != NULL)
+			DEBUG_PRINT("current db: %p, next: %p\n", iterator, iterator->next);
+			entry = iterator->ent;
+			while(entry != NULL)
 			{
 				// free it's value
-				free((*entry)->val);
+				DEBUG_PRINT("free val %p\n", entry->val);
+				free(entry->val);
 				prev = entry;
-				entry = &((*entry)->next);
+				entry = entry->next;
 			
 				// go to the next one
-				free(*prev);
-				*prev = NULL;
+				DEBUG_PRINT("free entry %p\n", prev);
+				free(prev);
 			}
 	
-			prev_db = dbs;
-			dbs = &((*dbs)->next);
-			free(*prev_db);
+			DEBUG_PRINT("current db: %p, next: %p\n", iterator, iterator->next);
+			prev_db = iterator;
+			iterator = iterator->next;
+			DEBUG_PRINT("free db %p, next is %p\n", prev_db, iterator);
+			free(prev_db);
+			prev_db = NULL;
 		}
 
+		*dbs = NULL;
 		memory_write_unlock(sem_rw);
 		success = 1;
 	}

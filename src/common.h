@@ -12,9 +12,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-// #define __DEBUG__
+#define __DEBUG__
 #ifdef __DEBUG__
-#define DEBUG_PRINT(...) { fprintf(stderr, __VA_ARGS__); }
+#define DEBUG_PRINT(...) \
+{ \
+	fprintf(stderr, "\033[33m"); \
+	fprintf(stderr, __VA_ARGS__); \
+	fprintf(stderr, "\033[0m"); \
+	\
+}
 #else
 #define DEBUG_PRINT(...) {}
 #endif
@@ -66,12 +72,9 @@
 #define ERR_ACCEPT 44
 #define ERR_CONNECT 44
 
-#define MAX_PATH_SIZE	1024
 #define MAX_DB_SIZE		16
-#define MAX_DICT_SIZE	16
 #define MAX_KEY_SIZE	32
-#define MAX_VAL_SIZE	1024 // because we have to have a limit in recv()
-#define COLLECTION_DELIMITER '.'
+#define MAX_VAL_SIZE	0 // because we have to have a limit in recv()
 
 // for shared memory RW (we want to be able to have multiple readers,
 // but block them only if we are writing)
@@ -112,6 +115,10 @@ typedef struct info {
 	pid_t pid;
 	int ack_len;
 	char ack_msg[STORE_ACK_LEN];
+	char sock_path[MAX_SOCK_PATH_SIZE];
+	int max_key_len;
+	int max_val_len;
+	int max_db_len;
 } store_info;
 
 // for get and set operations
@@ -125,7 +132,8 @@ struct entry_inf {
 };
 
 void print_error_case(int error);
-void print_error(char *msg);
+void print_error(const char *msg, ...);
+void print_perror(const char *msg);
 int max(int x, int y);
 int min(int x, int y);
 

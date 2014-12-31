@@ -11,12 +11,12 @@ int main()
 
 	if(-1 == shmid)
 	{
-		perror("shmget");
+		print_perror("shmget");
 		error = 1;
 	}
 	else if(-1 == shmctl(shmid, IPC_RMID, NULL))
 	{
-		perror("shmctl");
+		print_perror("shmctl");
 		error = 1;
 	}
 

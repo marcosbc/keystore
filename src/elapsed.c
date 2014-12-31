@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
 		if(fork() == 0)
 		{
 			execvp(argv[1], &argv[1]);
-			perror("error ejecutando el programa");
+			perror("execvp");
 		}
 		else
 		{

@@ -52,22 +52,22 @@ int store_set(char key[], char value[], int num_dbs, char *dbs[])
 	// connect to socket
 	else if(connect(s, (struct sockaddr *) &addr, len) == -1)
 	{
-		perror("connect");
+		print_perror("connect");
 		error = ERR_CONNECT;
 	}
-	else if(NULL == (dbs_corrected = (char *) malloc(num_dbs * MAX_DB_SIZE
-	                                                 * sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) malloc(strlen(key)
-	                                                    * sizeof(char)))))
+	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * MAX_DB_SIZE,
+	                                                 sizeof(char))) ||
+	       (NULL == (key_corrected = (char *) calloc(strlen(key),
+	                                                 sizeof(char)))))
 	{
 		error = ERR_ALLOC;
-		perror("malloc");
+		print_perror("calloc");
 	}
 	else
 	{
 		// correct key and dbs variable's size
 		strncpy(key_corrected, key, MAX_KEY_SIZE - 1);
-		key_corrected[MAX_VAL_SIZE - 1] = '\0';
+		key_corrected[MAX_KEY_SIZE - 1] = '\0';
 
 		for(i = 0; i < num_dbs; i++)
 		{
@@ -158,16 +158,16 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	// connect to socket
 	else if(connect(s, (struct sockaddr *) &addr, len) == -1)
 	{
-		perror("connect");
+		print_perror("connect");
 		error = ERR_CONNECT;
 	}
-	else if(NULL == (dbs_corrected = (char *) malloc(num_dbs * MAX_DB_SIZE
-	                                                 * sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) malloc(strlen(key)
-	                                                    * sizeof(char)))))
+	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * MAX_DB_SIZE,
+	                                                 sizeof(char))) ||
+	       (NULL == (key_corrected = (char *) calloc(strlen(key),
+	                                                 sizeof(char)))))
 	{
 		error = ERR_ALLOC;
-		perror("malloc");
+		print_perror("calloc");
 	}
 	else
 	{
@@ -175,7 +175,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 
 		// correct key and dbs variable's size
 		strncpy(key_corrected, key, MAX_KEY_SIZE - 1);
-		key_corrected[MAX_VAL_SIZE - 1] = '\0';
+		key_corrected[MAX_KEY_SIZE - 1] = '\0';
 
 		// we will be using single pointers instead of tables to copy db
 		for(i = 0; i < num_dbs; i++)
@@ -193,7 +193,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
-		write(s, key, MAX_KEY_SIZE * sizeof(char));
+		write(s, key_corrected, MAX_KEY_SIZE * sizeof(char));
 		read(s, ack_buff, STORE_ACK_LEN);
 		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
 		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
@@ -217,21 +217,29 @@ int store_get(char key[], int num_dbs, char *dbs[])
 			DEBUG_PRINT("val_len \"%d\" read\n", val_len);
 			write(s, STORE_ACK, STORE_ACK_LEN);
 			DEBUG_PRINT("ack written\n");
+			
+			DEBUG_PRINT("current value pointer before calloc for %d bytes: %p\n",
+			            (val_len + 1) * ((int) sizeof(char)), val);
+			val = (char *) calloc((val_len + 1), sizeof(char));
+			DEBUG_PRINT("finished calloc\n");
+			DEBUG_PRINT("value pointer after calloc: %p\n", val);
 
 			// memory alloc
-			if(NULL != (val = (char *) malloc((val_len + 1) * sizeof(char))))
+			if(NULL != val)
 			{
+				DEBUG_PRINT("reading value\n");
 				read(s, val, (val_len + 1) * sizeof(char));
 				DEBUG_PRINT("val \"%s\" read\n", val);
 				write(s, STORE_ACK, STORE_ACK_LEN);
 				DEBUG_PRINT("ack written\n");
 	
-				printf("%s: %s=%s\n", dbs[i], key, val);
+				printf("%s: %s=%s\n", dbs_corrected + i * MAX_DB_SIZE,
+				       key_corrected, val);
 				DEBUG_PRINT("---DONE---\n");
 			}
 			else
 			{
-				perror("malloc");
+				print_perror("calloc");
 				error = ERR_ALLOC;
 			}
 			free(val);
@@ -282,7 +290,7 @@ int store_halt()
 	// connect to socket
 	else if(connect(s, (struct sockaddr *) &addr, len) == -1)
 	{
-		perror("connect");
+		print_perror("connect");
 		error = ERR_CONNECT;
 	}
 	else

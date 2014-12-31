@@ -32,7 +32,5 @@
 #define HALT_NUM_ARGS       2 // 1 + 1
 
 int check_arguments(int num, char *args[], int *mode);
-void print_error_case(int error);
-void print_error(char *msg);
 
 #endif
