@@ -14,9 +14,9 @@ void *memory_set(void *info);
 void *memory_get(void *info);
 int memory_clear(store_db **dbs);
 int free_tree(store_db **dbs, int *error);
-void memory_read_lock(sem_t *sem);
-void memory_read_unlock(sem_t *sem);
-void memory_write_lock(sem_t *sem, sem_t *mutex);
-void memory_write_unlock(sem_t *sem);
+void memory_read_lock();
+void memory_read_unlock();
+void memory_write_lock();
+void memory_write_unlock();
 
 #endif

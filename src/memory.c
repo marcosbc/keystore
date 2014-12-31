@@ -12,32 +12,17 @@
 #include "memory.h"
 #include "database.h"
 
-// shared memory:
-//   to get different databases
-//   each database has a pointer to each collection
-//   collections (app:settings) have pointer to elements
-//   we want the elements (app:settings:setting)
+int shmid = -1;
+sem_t *sem_mutex = NULL;
+sem_t *sem_rw = NULL;
 
 int memory_init()
 {
 	int ok = 1;
-	sem_t *sem_mutex, *sem_rw;
 	
 	DEBUG_PRINT("notice: creating semaphores for memory operations\n");
 
-	if((sem_t *) -1 != (sem_mutex = sem_open(SEM_MUTEX, 0)))
-	{
-		sem_close(sem_mutex);
-	}
-
-	if((sem_t *) -1 != (sem_rw = sem_open(SEM_RW, 0)))
-	{
-		sem_close(sem_rw);
-	}
-
 	// if we don't unlink them, they give problems
-	sem_unlink(SEM_MUTEX);
-	sem_unlink(SEM_RW);
 	
 	// create semaphores
 	sem_mutex = sem_open(SEM_MUTEX, O_CREAT, 0666, 1); // binary semaphore
@@ -47,11 +32,11 @@ int memory_init()
 	{
 		if(sem_mutex == (sem_t *) -1)
 		{
-			print_error("couldn't create semaphore \"%s\"\n", SEM_MUTEX);
+			print_error("couldn't create semaphore \"%s\"", SEM_MUTEX);
 		}
 		if(sem_rw == (sem_t *) -1)
 		{
-			print_error("couldn't create semaphore \"%s\"\n", SEM_RW);
+			print_error("couldn't create semaphore \"%s\"", SEM_RW);
 		}
 		print_perror("sem_open");
 		ok = 0;
@@ -62,11 +47,11 @@ int memory_init()
 
 void *memory_set(void *info)
 {
+	DEBUG_PRINT("in memory_set\n");
 	int val_len = 0;
-	sem_t *sem_rw = sem_open(SEM_RW, 0);
-	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
 	store_entry *entry = NULL;
-	
+	store_db *db = NULL;
+
 	// extract information from our info variable
 	char *key = ((struct entry_inf *) info)->key;
 	char *value = ((struct entry_inf *) info)->value;
@@ -82,23 +67,23 @@ void *memory_set(void *info)
 		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
-			print_error("couldn't create semaphore \"%s\"\n",
+			print_error("couldn't open semaphore \"%s\"",
 			        SEM_MUTEX);
 		}
 	
 		if(sem_rw == (sem_t *) -1)
 		{
-			print_error("couldn't create semaphore \"%s\"\n", SEM_RW);
+			print_error("couldn't open semaphore \"%s\"", SEM_RW);
 		}
 	}
 	else
 	{
 		// we shouldn't write while reading/writing
-		memory_write_lock(sem_rw, sem_mutex);
+		memory_write_lock();
 	
 		DEBUG_PRINT("finding db\n");
 		// locate our db and find our entry
-		store_db *db = locate_db(db_name, *dbs);
+		db = locate_db(db_name, *dbs);
 
 		DEBUG_PRINT("db found?\n");
 		// create our db if it doesn't exist
@@ -176,7 +161,7 @@ void *memory_set(void *info)
 				((struct entry_inf *) info)->entry = entry;
 
 				#ifdef __DEBUG__
-				print_store_tree(*dbs);
+				print_store_tree(dbs);
 
 				if(entry != NULL)
 				{
@@ -192,17 +177,7 @@ void *memory_set(void *info)
 		}
 
 		// done!
-		memory_write_unlock(sem_rw);
-	}
-	
-	if(sem_rw != (sem_t *) -1)
-	{
-		sem_close(sem_rw);
-	}
-	
-	if(sem_mutex != (sem_t *) -1)
-	{
-		sem_close(sem_mutex);
+		memory_write_unlock();
 	}
 	
 	DEBUG_PRINT("returning thread error %d\n", *error);
@@ -211,8 +186,7 @@ void *memory_set(void *info)
 
 void *memory_get(void *info)
 {
-	sem_t *sem_rw = sem_open(SEM_RW, 0);
-	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
+	DEBUG_PRINT("in memory_get\n");
 	store_entry *ent = NULL;
 
 	// extract information from our info variable
@@ -228,18 +202,18 @@ void *memory_get(void *info)
 		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
-			print_error("couldn't open semaphore \"%s\"\n", SEM_MUTEX);
+			print_error("couldn't open semaphore \"%s\"", SEM_MUTEX);
 		}
 	
 		if(sem_rw == (sem_t *) -1)
 		{
-			print_error("couldn't open semaphore \"%s\"\n", SEM_RW);
+			print_error("couldn't open semaphore \"%s\"", SEM_RW);
 		}
 	}
 	else
 	{
 		// we have a limit of max readers at once
-		memory_read_lock(sem_rw);
+		memory_read_lock();
 
 		DEBUG_PRINT("locating db %s in dbs %p\n", db_name, dbs);
 
@@ -277,7 +251,7 @@ void *memory_get(void *info)
 			((struct entry_inf *) info)->value = value;
 
 			#ifdef __DEBUG__
-			print_store_tree(dbs);
+			print_store_tree(&dbs);
 
 			if(ent != NULL)
 			{
@@ -292,19 +266,9 @@ void *memory_get(void *info)
 		}
 
 		// reading done!
-		memory_read_unlock(sem_rw);
+		memory_read_unlock();
 	}
 	
-	if(sem_rw != (sem_t *) -1)
-	{
-		sem_close(sem_rw);
-	}
-	
-	if(sem_mutex != (sem_t *) -1)
-	{
-		sem_close(sem_mutex);
-	}
-
 	DEBUG_PRINT("returning thread error %d\n", *error);
 	pthread_exit(NULL);
 }
@@ -317,19 +281,29 @@ int memory_clear(store_db **dbs)
 
 	if(! free_tree(dbs, &error))
 	{
-		print_error("memory couldn't be freed\n");
+		print_error("memory couldn't be freed");
+	}
+	
+	if(sem_rw != (sem_t *) -1)
+	{
+		sem_close(sem_rw);
+	}
+	
+	if(sem_mutex != (sem_t *) -1)
+	{
+		sem_close(sem_mutex);
 	}
 
 	if(-1 == sem_unlink(SEM_MUTEX))
 	{
 		error = ERR_MEM_SEMUNLINK;
-		print_error("couldn't unlink semaphore \"%s\"\n", SEM_RW);
+		print_error("couldn't unlink semaphore \"%s\"", SEM_RW);
 	}
 
 	if(-1 == sem_unlink(SEM_RW))
 	{
 		error = ERR_MEM_SEMUNLINK;
-		print_error("couldn't unlink semaphore \"%s\"\n", SEM_MUTEX);
+		print_error("couldn't unlink semaphore \"%s\"", SEM_MUTEX);
 	}
 
 	return error;
@@ -342,28 +316,26 @@ int free_tree(store_db **dbs, int *error)
 	store_db *iterator = NULL;
 	store_entry *entry = NULL;
 	store_entry *prev = NULL;
-	sem_t *sem_rw = sem_open(SEM_RW, 0);
-	sem_t *sem_mutex = sem_open(SEM_MUTEX, 0);
 
 	if(sem_rw == (sem_t *) -1 || sem_mutex == (sem_t *) -1)
 	{
 		*error = ERR_MEM_SEMOPEN;
 		if(sem_mutex == (sem_t *) -1)
 		{
-			print_error("couldn't open semaphore \"%s\"\n",
+			print_error("couldn't open semaphore \"%s\"",
 			        SEM_MUTEX);
 		}
 	
 		if(sem_rw == (sem_t *) -1)
 		{
-			print_error("couldn't open semaphore \"%s\"\n",
+			print_error("couldn't open semaphore \"%s\"",
 			        SEM_RW);
 		}
 		print_perror("sem_open");
 	}
 	else
 	{
-		memory_write_lock(sem_rw, sem_mutex);
+		memory_write_lock();
 		iterator = *dbs;
 
 		// see what our dbs contains now
@@ -393,47 +365,38 @@ int free_tree(store_db **dbs, int *error)
 		}
 
 		*dbs = NULL;
-		memory_write_unlock(sem_rw);
+		memory_write_unlock();
 		success = 1;
 	}
 	
-	if(sem_rw != (sem_t *) -1)
-	{
-		sem_close(sem_rw);
-	}
-	
-	if(sem_mutex != (sem_t *) -1)
-	{
-		sem_close(sem_mutex);
-	}
-
 	return success;
 }
 
 
 
-void memory_read_lock(sem_t *sem)
+void memory_read_lock()
 {
 	DEBUG_PRINT("read: going for rw wait...\n");
 
-	sem_wait(sem);
+	sem_wait(sem_rw);
 	
 	DEBUG_PRINT("read: done\n");
 }
 
-void memory_read_unlock(sem_t *sem)
+void memory_read_unlock()
 {
-	sem_post(sem);
+	sem_post(sem_rw);
 }
 
-void memory_write_lock(sem_t *sem, sem_t *mutex)
+void memory_write_lock()
 {
 	int i;
 
-	DEBUG_PRINT("write: going for mutex wait...\n");
+	DEBUG_PRINT("write: going for mutex wait, rw=%p and mut=%p...\n",
+	            sem_rw, sem_mutex);
 
 	// in case we have multiple writers
-	sem_wait(mutex);
+	sem_wait(sem_mutex);
 	
 	DEBUG_PRINT("write: going for write wait...\n");
 			
@@ -444,24 +407,24 @@ void memory_write_lock(sem_t *sem, sem_t *mutex)
 		DEBUG_PRINT("write: iteration %d\n", i);
 		// we have a maximum number of readers
 		// but we want to be able to read simultaneously
-		sem_wait(sem);
+		sem_wait(sem_rw);
 	}
 
 	DEBUG_PRINT("write: going for mutex post...\n");
 
 	// we shouldn't have problems with multiple writers now
-	sem_post(mutex);
+	sem_post(sem_mutex);
 	
 	DEBUG_PRINT("write: done\n");
 }
 
-void memory_write_unlock(sem_t *sem)
+void memory_write_unlock()
 {
 	int i;
 
 	for(i = 0; i < MAX_READERS_AT_ONCE; i++)
 	{
 		// semaphore++
-		sem_post(sem);
+		sem_post(sem_rw);
 	}
 }

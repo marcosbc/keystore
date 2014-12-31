@@ -13,4 +13,4 @@ elapsed: $(SRCDIR)/elapsed.c
 	gcc -W -Wall $(SRCDIR)/elapsed.c -o $(BINDIR)/elapsed
 
 clear_memory: $(SRCDIR)/clear.c $(SRCDIR)/common.c $(SRCDIR)/common.h
-	gcc -W -Wall $(SRCDIR)/clear.c $(SRCDIR)/common.c -o $(BINDIR)/clear_memory
+	gcc -W -Wall $(SRCDIR)/clear.c $(SRCDIR)/common.c -o $(BINDIR)/clear_memory -lpthread

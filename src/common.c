@@ -44,9 +44,9 @@ void print_error(const char *msg, ...)
 	va_list args;
 	va_start(args, msg);
 
-	vfprintf(stderr, "\033[31merror:", args);
+	vfprintf(stderr, "\033[31merror: ", args);
 	vfprintf(stderr, msg, args);
-	vfprintf(stderr, "\033[0m", args);
+	vfprintf(stderr, "\n\033[0m", args);
 
 	va_end(args);
 }

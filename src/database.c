@@ -37,38 +37,57 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 
 store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
 {
+	#ifdef __DEBUG__
+	DEBUG_PRINT("store tree BEFORE");
+	print_store_tree(db);
+	#endif
+
 	store_entry *entry = NULL;
 	store_entry **iterator = &((*db)->ent);
+	store_entry **complete_iterator = &((*db)->ent); // iterate all entry elements
+
+	while(*complete_iterator != NULL)
+	{
+		complete_iterator = &((*complete_iterator)->next);
+	}
 
 	// find the last element entry
 	while(*iterator != NULL)
 	{
-		iterator = &((*iterator)->next);
+		iterator = &((*iterator)->brother);
 	}
 
 	entry = (store_entry *) calloc(1, sizeof(store_entry));
-		DEBUG_PRINT("alloc: %p\n", entry);
+	DEBUG_PRINT("alloc: %p\n", entry);
+	
 	if(entry != NULL)
 	{
 		DEBUG_PRINT("setting value for entry\n");
 		// add basic fields
 		*iterator = entry;
+		*complete_iterator = entry;
 		strcpy(entry->key, key);
 		entry->val = NULL;
 		entry->next = NULL;
+		entry->brother = NULL;
 		DEBUG_PRINT("values set for entry\n");
 	}
+
+	#ifdef __DEBUG__
+	DEBUG_PRINT("store tree AFTER");
+	print_store_tree(db);
+	#endif
 
 	return entry;
 }
 
-// db: collection.subcollection.subsubcollection.entry?
+// locate an entry in the database
 store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
 	// find our collection
 	while(db->ent != NULL && 0 != strcmp(key, db->ent->key))
 	{
-		db->ent = db->ent->next;
+		db->ent = db->ent->brother;
 	}
 
 	return db->ent;
@@ -120,22 +139,23 @@ void print_existing_databases(store_db *store_dbs)
 
 }
 
-void print_store_tree(store_db *dbs)
+void print_store_tree(store_db **dbs)
 {
 	store_entry *p = NULL;
+	store_db **iterator = dbs;
 
 	// see what our dbs contains now
-	while(dbs != NULL)
+	while(*iterator != NULL)
 	{
-		printf("\n\n--- database %s ---\n", dbs->name);
-		p = dbs->ent;
+		printf("\n\n--- database %s ---\n", (*iterator)->name);
+		p = (*iterator)->ent;
 		while(p != NULL)
 		{
 			printf("* %s=%s\n", p->key, p->val);
 			p = p->next;
 		}
 
-		dbs = dbs->next;
+		iterator = &((*iterator)->next);
 	}
 }
 #endif

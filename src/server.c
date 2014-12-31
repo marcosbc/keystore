@@ -451,21 +451,18 @@ int store_server_init()
 	// ignore our sigpipe signal
 	signal(SIGPIPE, SIG_IGN);
 
+	// why or? so we make sure there are no conflicts
 	if(-1 != (shmid = shmget(shm_key, sizeof(struct info), 0664))
-	   && (store_info *) -1 != (store = shmat(shmid, NULL, 0)))
+	   || (store_info *) -1 != (store = shmat(shmid, NULL, 0)))
 	{
-		// kill our previous server
-		store->shutdown_reason = SHUTDOWN_NEWSESSION;
-		kill(store->pid, SIGINT);
-		shmctl(shmid, IPC_RMID, NULL);
-		shmdt(store);
+		error = ERR_SESSION;
+		print_error(ERR_SESSION_MSG);
+		DEBUG_PRINT("shmid=%d, store=%p (-1 = %p)\n", shmid,
+		            store, (store_info *) -1);
 	}
-	
-	// create our root db
-	shmid = shmget(shm_key, sizeof(struct info), IPC_CREAT | IPC_EXCL | 0664);
-
 	// we shouldn't be able to initialize memory when it has already been done
-	if(-1 == shmid)
+	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info),
+	                         IPC_CREAT | IPC_EXCL | 0664)))
 	{
 		error = ERR_STORE_SHMCREATE;
 	}
@@ -501,6 +498,8 @@ int store_server_init()
 	}
 	else
 	{
+		memory_write_lock();
+
 		// set public configuration info in our shared memory
 		store->pid = getpid();
 		store->ack_len = STORE_ACK_LEN;
@@ -510,8 +509,9 @@ int store_server_init()
 		store->max_key_len = MAX_KEY_SIZE;
 		store->max_val_len = MAX_VAL_SIZE;
 		store->max_db_len = MAX_DB_SIZE;
-		store->shutdown_reason = SHUTDOWN_UNDEFINED;
 		
+		memory_write_unlock();
+
 		// *** import our file system data ***
 		// dbs = store_import();
 
@@ -544,18 +544,19 @@ int store_server_init()
 	// unmap our shared memory
 	// please note the error comparison is placed after on purpose,
 	// so the error won't be rewritten but the memory is shared if needed
-	if(-1 == shmdt(store) && error != ERR_STORE_SHMLOAD)
+	if(-1 == shmdt(store) && error != ERR_STORE_SHMLOAD && error != ERR_SESSION)
 	{
 		error = ERR_STORE_SHMDT;
 	}
 
 	// now that we're done, remove the shared memory
-	if(-1 == shmctl(shmid, IPC_RMID, NULL) && error != ERR_STORE_SHMCREATE)
+	if(-1 == shmctl(shmid, IPC_RMID, NULL) && error != ERR_STORE_SHMCREATE
+	   && error != ERR_SESSION)
 	{
 		error = ERR_STORE_SHMCTL;
 	}
 
-	if(error != ERR_MEM_SEMOPEN)
+	if(error != ERR_MEM_SEMOPEN && error != ERR_SESSION)
 	{
 		// clear our semaphores and free memory
 		error = memory_clear(&dbs);

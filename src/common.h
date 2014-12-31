@@ -29,7 +29,9 @@
 #define SHM_SIZE 1024
 
 #define ERR_NONE 0
-#define ERR_FORK 2
+#define ERR_SESSION 2
+#define ERR_SESSION_MSG "you already have a session running"
+#define ERR_FORK 3
 #define ERR_FORK_MSG "fork returned a number less than zero"
 #define ERR_ALLOC 5
 #define ERR_ALLOC_MSG "memory allocation returned NULL"
@@ -95,15 +97,12 @@
 #define MAX_SOCK_PATH_SIZE 100
 #define STORE_SOCKET_PATH "keystore_server.sock"
 
-// socket shutdown reasons
-#define SHUTDOWN_UNDEFINED  'u'
-#define SHUTDOWN_NEWSESSION 'n'
-
 // entry type
 typedef struct entry {
 	char key[MAX_KEY_SIZE];
 	char *val; // we don't want to have a maximum-value size
 	struct entry *next;
+	struct entry *brother; // to iterate entries in dbs
 } store_entry;
 
 // why not double-linked list? because the first one is created in
@@ -124,7 +123,6 @@ typedef struct info {
 	int max_key_len;
 	int max_val_len;
 	int max_db_len;
-	char shutdown_reason;
 } store_info;
 
 // for get and set operations
