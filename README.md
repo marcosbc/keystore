@@ -34,6 +34,7 @@ We have two different modes of usage:
 
 - UNIX Sockets: To send a request-data between the server and the client. We are using bi-directional UNIX sockets (with `SOCK_STREAM`).
 We could have used FIFO pipes but we opted by this, since it is something more modern and client-server specific.
+We could also have used message queues instead, which can be seen as ideal but we want our client and server to be connected, and to know when one is not alive. Using sockets also allows us to send non-static data, e.g. strings with a dynamic length.
 
 ### INSTALLATION STEPS
 
