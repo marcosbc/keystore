@@ -1,8 +1,9 @@
 SRCDIR = ./src
 BINDIR = ./bin
 
-all: clear_memory keystore keystored elapsed
+all: create_bin clear_memory keystore keystored elapsed
 	cp $(SRCDIR)/daemon.sh $(BINDIR)/keystored
+	cp $(SRCDIR)/keystore.sh $(BINDIR)/keystore
 
 keystored: $(SRCDIR)/daemon.c $(SRCDIR)/daemon.h $(SRCDIR)/server.c $(SRCDIR)/server.h $(SRCDIR)/memory.c $(SRCDIR)/memory.h $(SRCDIR)/disk.c $(SRCDIR)/disk.h $(SRCDIR)/common.c $(SRCDIR)/common.h $(SRCDIR)/database.c $(SRCDIR)/database.h $(SRCDIR)/types.h $(SRCDIR)/sems.c $(SRCDIR)/sems.h
 	gcc -W -Wall $(SRCDIR)/daemon.c $(SRCDIR)/server.c $(SRCDIR)/memory.c $(SRCDIR)/disk.c $(SRCDIR)/common.c $(SRCDIR)/database.c $(SRCDIR)/sems.c -o $(BINDIR)/keystored.bin -lpthread
@@ -15,6 +16,9 @@ elapsed: $(SRCDIR)/elapsed.c
 
 clear_memory: $(SRCDIR)/clear.c $(SRCDIR)/common.c $(SRCDIR)/common.h $(SRCDIR)/types.h $(SRCDIR)/sems.c $(SRCDIR)/sems.h
 	gcc -W -Wall $(SRCDIR)/clear.c $(SRCDIR)/common.c $(SRCDIR)/sems.c -o $(BINDIR)/clear_memory.bin -lpthread
+
+create_bin:
+	mkdir -p $(BINDIR)
 
 clear:
 	$(BINDIR)/clear_memory.bin

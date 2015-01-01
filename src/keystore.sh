@@ -7,15 +7,5 @@
 #          PLEASE DO NOT DISTRIBUTE OR PUBLISH ANY MODIFICATION UNTIL
 #          IT GETS RELEASED PUBLICLY.
 
-LOGS_DIR=/tmp/keystore
-DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
-
-cd $DIR
-
-if [ ! -d $LOGS_DIR ]
-then
-	mkdir -p $LOGS_DIR
-fi
-
-./clear_memory.bin 2>> $LOGS_DIR/error.log
-./keystored.bin >> $LOGS_DIR/access.log 2>> $LOGS_DIR/error.log &
+cd "$( dirname "${BASH_SOURCE[0]}" )"
+./keystore.bin

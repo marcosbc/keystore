@@ -1,29 +1,17 @@
 /*
- * AUTHOR: Marcos Bjorkelund
- * DATE: 06/11/2014
- * SUBJECT: Operating Systems
- * HIGHER TECHNICAL SCHOOL OF ENGINEERING, UNIVERSITY OF SEVILLE
+ * PROJECT: Development of a key-value database (includes client)
+ * AUTHORS: Marcos Bjorkelund
+ * NOTICE:  THIS WAS CREATED FOR A SUBJECT IN UNIVERSITY OF SEVILLE'S
+ *          HIGHER TECHNICAL SCHOOL OF ENGINEERING AS A COURSE PROJECT.
+ *          PLEASE DO NOT DISTRIBUTE OR PUBLISH ANY MODIFICATION UNTIL
+ *          IT GETS RELEASED PUBLICLY.
  */
+
 #include <stdio.h>
 #include <string.h>
 #include "common.h"
 #include "client.h"
 #include "keystore.h"
-
-// modes:
-// - create
-// - set
-// - get
-
-// fork:
-// - parent: alter the database in memory
-// - children: alter the database file 
-
-// threads:
-//   for searching through multiple databases
-
-// semaphores:
-//   for altering memory operations
 
 int main(int argc, char *argv[])
 {
