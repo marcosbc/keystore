@@ -39,7 +39,6 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 {
 	int err = 0;
 	int i = 0;
-	// pid_t pid;
 	int therr = 0;
 	pthread_t *thids = NULL;
 	struct entry_inf *ent_inf = NULL;
@@ -471,9 +470,7 @@ int store_server_init()
 		write_lock();
 
 		// init our socket info, everything went ok
-		getcwd(store->sock_path, sizeof(store->sock_path));
-		strcat(store->sock_path, "/");
-		strcat(store->sock_path, STORE_SOCKET_PATH);
+		strcpy(store->sock_path, STORE_SOCKET_PATH);
 
 		// make a clone of the sock_path var
 		strcpy(sock_path, store->sock_path);

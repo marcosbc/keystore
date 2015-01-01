@@ -16,7 +16,7 @@
 #define MAX_KEY_SIZE      32
 #define MAX_VAL_SIZE      0
 #define STORE_ACK         "ok"
-#define STORE_SOCKET_PATH "keystore_server.sock"
+#define STORE_SOCKET_PATH "/tmp/keystore_server.sock"
 #define STORE_MODE_SET    's'
 #define STORE_MODE_GET    'g'
 #define STORE_MODE_STOP   'x'
