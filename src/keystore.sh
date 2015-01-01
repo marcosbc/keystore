@@ -8,4 +8,4 @@
 #          IT GETS RELEASED PUBLICLY.
 
 cd "$( dirname "${BASH_SOURCE[0]}" )"
-./keystore.bin
+./keystore.bin $@
