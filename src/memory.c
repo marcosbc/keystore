@@ -104,10 +104,31 @@ void *memory_set(void *info)
 		else
 		{
 			DEBUG_PRINT("finding entry\n");
-	
+
+
+			#ifdef __DEBUG__
+			DEBUG_PRINT("\n\nstore tree BEFORE");
+			print_store_tree(&db);
+			#endif
+
+
 			entry = locate_entry(key, db);
 			DEBUG_PRINT("entry found?\n");
-	
+
+
+			#ifdef __DEBUG__
+			DEBUG_PRINT("\n\nstore tree AFTER");
+			print_store_tree(&db);
+			#endif
+
+
+			#ifdef __DEBUG__
+			DEBUG_PRINT("\n\nstore tree AFTER 2");
+			print_store_tree(&db);
+			#endif
+
+
+
 			// did we find an entry?
 			if(entry != NULL)
 			{
@@ -120,9 +141,13 @@ void *memory_set(void *info)
 			else
 			{
 				DEBUG_PRINT("no, creat\n");
+
+
+
 				entry = create_entry(key, &db);
 				DEBUG_PRINT("created\n");
-	
+
+
 				if(entry == NULL)
 				{
 					*error = ERR_ALLOC;
@@ -400,8 +425,6 @@ void memory_write_lock()
 	
 	DEBUG_PRINT("write: going for write wait...\n");
 			
-	// we want the writer to have equal chances to be able to
-	// use our shared memory
 	for(i = 0; i < MAX_READERS_AT_ONCE; i++)
 	{
 		DEBUG_PRINT("write: iteration %d\n", i);

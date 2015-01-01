@@ -37,14 +37,9 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 
 store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
 {
-	#ifdef __DEBUG__
-	DEBUG_PRINT("store tree BEFORE");
-	print_store_tree(db);
-	#endif
-
 	store_entry *entry = NULL;
-	store_entry **iterator = &((*db)->ent);
-	store_entry **complete_iterator = &((*db)->ent); // iterate all entry elements
+	store_entry **iterator = &((*db)->ent); // only specific db entries
+	store_entry **complete_iterator = &((*db)->ent); // all entries
 
 	while(*complete_iterator != NULL)
 	{
@@ -72,36 +67,38 @@ store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
 		entry->brother = NULL;
 		DEBUG_PRINT("values set for entry\n");
 	}
-
-	#ifdef __DEBUG__
-	DEBUG_PRINT("store tree AFTER");
-	print_store_tree(db);
-	#endif
-
+	
 	return entry;
 }
 
-// locate an entry in the database
+// locate an entry in the database, IT DOES NOT WORK OK
 store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
+	DEBUG_PRINT("locating entry\n");
+	store_entry *iterator = db->ent;
+
 	// find our collection
-	while(db->ent != NULL && 0 != strcmp(key, db->ent->key))
+	while(iterator != NULL && 0 != strcmp(key, iterator->key))
 	{
-		db->ent = db->ent->brother;
+		DEBUG_PRINT("current: %s=%s, brother=%p\n", iterator->key, iterator->val,
+		            iterator->brother);
+		iterator = iterator->brother;
 	}
 
-	return db->ent;
+	return iterator;
 }
 
-// db?
+// db? DOES IT WORK?
 store_db *locate_db(char *name, store_db *db)
 {
-	while(db != NULL && 0 != strncmp(name, db->name, MAX_DB_SIZE))
+	store_db *iterator = db;
+
+	while(iterator != NULL && 0 != strncmp(name, iterator->name, MAX_DB_SIZE))
 	{
-		db = db->next;
+		iterator = iterator->next;
 	}
 
-	return db;
+	return iterator;
 }
 
 #ifdef __DEBUG__
@@ -152,7 +149,7 @@ void print_store_tree(store_db **dbs)
 		while(p != NULL)
 		{
 			printf("* %s=%s\n", p->key, p->val);
-			p = p->next;
+			p = p->brother;
 		}
 
 		iterator = &((*iterator)->next);
