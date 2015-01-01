@@ -1,5 +1,6 @@
 #include <strings.h>
 #include "common.h"
+#include "types.h"
 #include "database.h"
 
 store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)

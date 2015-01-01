@@ -3,6 +3,7 @@
 #include <semaphore.h>
 #include <unistd.h>
 #include "common.h"
+#include "sems.h"
 
 int main()
 {
@@ -18,21 +19,6 @@ int main()
 		error = 1;
 	}
 
-	/* sem_rw = sem_open(SEM_RW, 0);
-	sem_mutex = sem_open(SEM_MUTEX, 0);
-	
-	if((sem_t *) -1 != sem_rw && -1 == sem_close(sem_rw))
-	{
-		print_perror("sem_close");
-		error = 1;
-	}
-
-	if((sem_t *) -1 != sem_mutex && -1 == sem_close(sem_mutex))
-	{
-		print_perror("sem_close");
-		error = 1;
-	} */
-
 	unlink(SEM_RW);
 	unlink(SEM_MUTEX);
 	
@@ -41,4 +27,3 @@ int main()
 
 	return error;
 }
-

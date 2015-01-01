@@ -26,7 +26,6 @@
 #endif
 
 #define KEY_ID 'K'
-#define SHM_SIZE 1024
 
 #define ERR_NONE 0
 #define ERR_SESSION 2
@@ -49,6 +48,8 @@
 #define ERR_MEM_SEMOPEN_MSG "while opening semaphores"
 #define ERR_MEM_SEMUNLINK 16
 #define ERR_MEM_SEMUNLINK_MSG "while unlinking semaphores"
+#define ERR_MEM_SEMCLOSE 17
+#define ERR_MEM_SEMCLOSE_MSG "while closing semaphores"
 #define ERR_THR 20
 #define ERR_THR_MSG ""
 #define ERR_THRJOIN 21
@@ -74,44 +75,13 @@
 #define ERR_ACCEPT 44
 #define ERR_CONNECT 44
 
-#define MAX_DB_SIZE		16
-#define MAX_KEY_SIZE	32
-#define MAX_VAL_SIZE	0 // because we have to have a limit in recv()
+#define STORE_NUM_MODES 3
+#define STORE_MODE_SET_ID 0
+#define STORE_MODE_GET_ID 1
+#define STORE_MODE_STOP_ID 2
 
-// for shared memory RW (we want to be able to have multiple readers,
-// but block them only if we are writing)
-#define MAX_READERS_AT_ONCE 10
-#define ONE             1
-
-#define SEM_MUTEX		"mutex"
-#define SEM_RW			"readwrite"
-
-#define STORE_MODE_SET  's'
-#define STORE_MODE_GET  'g'
-#define STORE_MODE_STOP 'x'
-
-#define STORE_ACK       "ok"
-#define STORE_ACK_LEN   3 // strlen("ok") + 1 (= \0)
-
-// pipe paths
+#define STORE_ACK_LEN 3 // strlen('o', 'k') + 1 ('\0')
 #define MAX_SOCK_PATH_SIZE 100
-#define STORE_SOCKET_PATH "keystore_server.sock"
-
-// entry type
-typedef struct entry {
-	char key[MAX_KEY_SIZE];
-	char *val; // we don't want to have a maximum-value size
-	struct entry *next;
-	struct entry *brother; // to iterate entries in dbs
-} store_entry;
-
-// why not double-linked list? because the first one is created in
-// shared memory, and there should be a theorical limit of number of dbs
-typedef struct db {
-	char name[MAX_DB_SIZE];
-	struct db *next;
-	struct entry *ent;
-} store_db;
 
 // for extracting info from shared memory
 typedef struct info {
@@ -123,17 +93,8 @@ typedef struct info {
 	int max_key_len;
 	int max_val_len;
 	int max_db_len;
+	char modes[STORE_NUM_MODES];
 } store_info;
-
-// for get and set operations
-struct entry_inf {
-	char key[MAX_KEY_SIZE]; // key/path to the name for the entry
-	char *value; // key/path to the name for the entry
-	struct entry *entry;
-	char *db_name;
-	struct db **dbs;
-	int error;
-};
 
 void print_error_case(int error);
 void print_error(const char *msg, ...);

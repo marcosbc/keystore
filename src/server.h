@@ -4,10 +4,11 @@
  * SUBJECT: Operating Systems
  * HIGHER TECHNICAL SCHOOL OF ENGINEERING, UNIVERSITY OF SEVILLE
  */
-#ifndef __KEYSTORE_STORE__
-#define __KEYSTORE_STORE__
+#ifndef __KEYSTORE_SERVER__
+#define __KEYSTORE_SERVER__
 
 #include <sys/un.h>
+#include "types.h"
 
 void store_stop();
 int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,

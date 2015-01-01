@@ -7,6 +7,8 @@
 #ifndef __KEYSTORE_DISK__
 #define __KEYSTORE_DISK__
 
+#include "types.h"
+
 void *disk_set(void *ent);
 void *disk_get(void *ent);
 

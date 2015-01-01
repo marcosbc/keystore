@@ -20,6 +20,7 @@
 #include "memory.h"
 #include "disk.h"
 #include "database.h"
+#include "sems.h"
 
 int stop_server = 0; // for signals to work
 
@@ -389,7 +390,7 @@ int store_server_act(int s, store_db **dbs)
 					}
 				}
 				DEBUG_PRINT("clearing result %p\n", result);
-				free(result);
+				free(result); // it is an array, so we can free it
 				result = NULL;
 			}
 		}
@@ -421,23 +422,9 @@ int store_server_init()
 	int s = -1; // our socket
 	struct sockaddr_un addr;
 	int len;
-	char sock_path[MAX_SOCK_PATH_SIZE];
 	store_db *dbs = NULL;
 	store_info *store = NULL; // shared memory to store public configuration
-
-	// set up our socket path
-	getcwd(sock_path, sizeof(sock_path));
-	strcat(sock_path, "/");
-	strcat(sock_path, STORE_SOCKET_PATH);
-
-	// set sockaddr information values
-	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_UNIX;
-	strcpy(addr.sun_path, sock_path);
-	len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
-	
-	// unlink our socket so we don't get errors if it is already created
-	unlink(sock_path);
+	char sock_path[MAX_SOCK_PATH_SIZE];
 
 	// set up signal to stop server correctly
 	act.sa_handler = store_stop;
@@ -465,17 +452,56 @@ int store_server_init()
 	                         IPC_CREAT | IPC_EXCL | 0664)))
 	{
 		error = ERR_STORE_SHMCREATE;
+		print_perror("shmget");
 	}
 	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
 	{
 		error = ERR_STORE_SHMAT;
+		print_perror("shmat");
 	}
 	else if(! memory_init())
 	{
 		error = ERR_MEM_SEMOPEN;
 		print_perror("sem_open");
 	}
-	else if(NULL != fopen(sock_path, "r"))
+	else
+	{
+		write_lock();
+
+		// init our socket info, everything went ok
+		getcwd(store->sock_path, sizeof(store->sock_path));
+		strcat(store->sock_path, "/");
+		strcat(store->sock_path, STORE_SOCKET_PATH);
+
+		// make a clone of the sock_path var
+		strcpy(sock_path, store->sock_path);
+
+		// set sockaddr information values
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+		strcpy(addr.sun_path, store->sock_path);
+		len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
+	
+		// unlink our socket so we don't get errors if it is already created
+		unlink(store->sock_path);
+
+		// set public configuration info in our shared memory
+		store->pid = getpid();
+		store->ack_len = STORE_ACK_LEN;
+		strcpy(store->ack_msg, STORE_ACK);
+		store->max_sock_len = MAX_SOCK_PATH_SIZE;
+		strcpy(store->sock_path, STORE_SOCKET_PATH);
+		store->max_key_len = MAX_KEY_SIZE;
+		store->max_val_len = MAX_VAL_SIZE;
+		store->max_db_len = MAX_DB_SIZE;
+		store->modes[STORE_MODE_SET_ID] = STORE_MODE_SET;
+		store->modes[STORE_MODE_GET_ID] = STORE_MODE_GET;
+		store->modes[STORE_MODE_STOP_ID] = STORE_MODE_STOP;
+		write_unlock();
+	}
+
+	// if we were able to store the info successfully, proceed
+	if(error == ERR_NONE && NULL != fopen(sock_path, "r"))
 	{
 		print_error("socket connection already exists");
 		error = ERR_SOCKETEXIST;
@@ -498,20 +524,6 @@ int store_server_init()
 	}
 	else
 	{
-		memory_write_lock();
-
-		// set public configuration info in our shared memory
-		store->pid = getpid();
-		store->ack_len = STORE_ACK_LEN;
-		strcpy(store->ack_msg, STORE_ACK);
-		store->max_sock_len = MAX_SOCK_PATH_SIZE;
-		strcpy(store->sock_path, STORE_SOCKET_PATH);
-		store->max_key_len = MAX_KEY_SIZE;
-		store->max_val_len = MAX_VAL_SIZE;
-		store->max_db_len = MAX_DB_SIZE;
-		
-		memory_write_unlock();
-
 		// *** import our file system data ***
 		// dbs = store_import();
 
@@ -542,16 +554,15 @@ int store_server_init()
 	}
 
 	// unmap our shared memory
-	// please note the error comparison is placed after on purpose,
-	// so the error won't be rewritten but the memory is shared if needed
-	if(-1 == shmdt(store) && error != ERR_STORE_SHMLOAD && error != ERR_SESSION)
+	if(error != ERR_STORE_SHMCREATE && error != ERR_SESSION
+	   && error != ERR_STORE_SHMAT && -1 == shmdt(store))
 	{
 		error = ERR_STORE_SHMDT;
 	}
 
 	// now that we're done, remove the shared memory
-	if(-1 == shmctl(shmid, IPC_RMID, NULL) && error != ERR_STORE_SHMCREATE
-	   && error != ERR_SESSION)
+	if(error != ERR_SESSION && error != ERR_STORE_SHMCREATE
+	   && -1 == shmctl(shmid, IPC_RMID, NULL))
 	{
 		error = ERR_STORE_SHMCTL;
 	}
