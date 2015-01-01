@@ -1,28 +1,117 @@
+# keystore
+## Development of a key-value database (includes client). Created for the Subject of Operating Systems.
+### Authors Marcos Bjorkelund and Adrian Marcelo Anillo
+
+**NOTICE:**  THIS WAS CREATED FOR A SUBJECT IN UNIVERSITY OF SEVILLE'S HIGHER TECHNICAL SCHOOL OF ENGINEERING AS A COURSE PROJECT.
+PLEASE DO NOT DISTRIBUTE OR PUBLISH ANY MODIFICATION UNTIL IT GETS RELEASED PUBLICLY.
+
 ==== DESCRIPTION ====
 
+We have used a server-client model in which the server is constantly running, so we can use dynamic memory allocation (e.g. via `malloc` or `calloc`).
+The client does not write anything to memory, but reads the server's settings (this was done by demonstration, however we could have used macros (which we use in some forced cases for the client), which uses semaphores to read (the same as the server, to avoid any modification issue).
+
 We have two different modes of usage:
-- set: Creates the specified databases if non-existant, and stores the specified values inside them
-- get: Searches the key in the databases, and returns the values found in each
+- set: Creates the specified databases if non-existant, and stores the specified value inside them
+- get: Searches the key in the specified databases, and returns the values found in each
 
 ==== TECHNIQUES USED ====
 
-fork:
-- parent: alter the database file
-- children: alter the database in memory
+- Linked lists: To store data dynamically and with the fewer limits possible.
 
-threads: for searching through multiple databases
+- Multi-processing (via `fork`)
+  * Parent: Alter the database(s) in memory (which does not wait for the child to finish)
+  * Child: Alter the databases' files in the HDD.
 
-semaphores: for altering memory operations
+- Signals: To stop the server when a `Ctrl-C` or `SIGINT` is sent to the process.
 
-==== USAGE ====
+- Threads: for searching through multiple databases
 
-    ??? $ keystore start
-	??? $ keystore stop
+- Shared memory: to store the server's settings
 
-    $ keystore set KEY VALUE DB1[ DB2[ ...]]
-    e.g.:
-	$ keystore set my_key my_value db1 db2 db3 db4 db5
+- Semaphores: for altering self-reserved memory for threading and shared memory (which stores the settings) operations
 
-    $ keystore get KEY DB1[ DB2[ ...]]
-	e.g.:
-	$ keystore get my_key db1 db2 db3 db4 db5
+- Clocks: To measure the time a request took and the time the server has been running right before a shutdown.
+
+- UNIX Sockets: To send a request-data between the server and the client. We are using bi-directional UNIX sockets (with `SOCK_STREAM`).
+We could have used FIFO pipes but we opted by this, since it is something more modern and client-server specific.
+
+==== INSTALLATION STEPS ====
+
+First, clone this GIT repository in your local computer:
+```
+    $ cd ~
+    $ git clone https://github.com/marcosbc/keystore.git
+```
+
+Next, compile and install! It is as easy as:
+```
+    $ make
+    $ sudo make install
+```
+
+Finally, you can remove the folder in which you compiled the application:
+```
+    $ rm -rf ~/keystore
+```
+
+==== SERVER USAGE ====
+
+To start your server, go into the folder in which the binaries are located and run:
+```
+    $ ./keystored
+```
+
+Your logs will be located at the `logs` directory inside `/var/log/keystore/`, where you will have `access.log` and `error.log`.
+
+==== CLIENT USAGE ====
+
+First, get into the folder in which the binary files are installed.
+
+To set a value in a database (no database creation step is needed), just run:
+```
+    $ ./keystore set KEY VALUE DB1[ DB2[ ...]]
+```
+E.g.:
+```
+    $ ./keystore set my_key my_value db1 db4 db5
+```
+
+To get a value from a database, run the following command:
+```
+    $ ./keystore get KEY DB1[ DB2[ ...]]
+```
+E.g:
+```
+    $ keystore get my_key db1 db2 db3 db4 db5
+    db1: my_key=my_value
+    db2: my_key=
+    db3: my_key=
+    db4: my_key=my_value
+    db5: my_key=my_value
+```
+
+Please notice that even if the value doesn't exist, you will get a return value. However, no databases will get created.
+
+To stop your server, just run:
+```
+    $ ./keystore stop
+```
+
+==== TROUBLESHOOTING ====
+
+If you killed your server with `SIGKILL` or the program encountered any error that did this, you might encounter problems with semaphores and/or shared memory that is already existing.
+
+To check if you have anything left open:
+```
+    $ ipcs
+```
+
+To terminate a semaphore:
+```
+    $ ipcrm -s SEMAPHORE_ID
+```
+
+To terminate shared memory:
+```
+    $ ipcrm -m SHARED_MEMORY_ID
+```
