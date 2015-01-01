@@ -1,20 +1,20 @@
 # keystore
-## Development of a key-value database (includes client). Created for the Subject of Operating Systems.
-### Authors Marcos Bjorkelund and Adrian Marcelo Anillo
+### Development of a key-value database (includes client). Created for the Subject of Operating Systems.
+##### Authors: Marcos Bjorkelund and Adrian Marcelo Anillo
 
 **NOTICE:**  THIS WAS CREATED FOR A SUBJECT IN UNIVERSITY OF SEVILLE'S HIGHER TECHNICAL SCHOOL OF ENGINEERING AS A COURSE PROJECT.
 PLEASE DO NOT DISTRIBUTE OR PUBLISH ANY MODIFICATION UNTIL IT GETS RELEASED PUBLICLY.
 
-==== DESCRIPTION ====
+### DESCRIPTION
 
 We have used a server-client model in which the server is constantly running, so we can use dynamic memory allocation (e.g. via `malloc` or `calloc`).
 The client does not write anything to memory, but reads the server's settings (this was done by demonstration, however we could have used macros (which we use in some forced cases for the client), which uses semaphores to read (the same as the server, to avoid any modification issue).
 
 We have two different modes of usage:
-- set: Creates the specified databases if non-existant, and stores the specified value inside them
-- get: Searches the key in the specified databases, and returns the values found in each
+- `set`: Creates the specified databases if non-existant, and stores the specified value inside them
+- `get`: Searches the key in the specified databases, and returns the values found in each
 
-==== TECHNIQUES USED ====
+### TECHNIQUES USED
 
 - Linked lists: To store data dynamically and with the fewer limits possible.
 
@@ -35,7 +35,7 @@ We have two different modes of usage:
 - UNIX Sockets: To send a request-data between the server and the client. We are using bi-directional UNIX sockets (with `SOCK_STREAM`).
 We could have used FIFO pipes but we opted by this, since it is something more modern and client-server specific.
 
-==== INSTALLATION STEPS ====
+### INSTALLATION STEPS
 
 First, clone this GIT repository in your local computer:
 ```
@@ -54,7 +54,7 @@ Finally, you can remove the folder in which you compiled the application:
     $ rm -rf ~/keystore
 ```
 
-==== SERVER USAGE ====
+### SERVER USAGE
 
 To start your server, go into the folder in which the binaries are located and run:
 ```
@@ -63,7 +63,7 @@ To start your server, go into the folder in which the binaries are located and r
 
 Your logs will be located at the `logs` directory inside `/var/log/keystore/`, where you will have `access.log` and `error.log`.
 
-==== CLIENT USAGE ====
+### CLIENT USAGE
 
 First, get into the folder in which the binary files are installed.
 
@@ -97,7 +97,7 @@ To stop your server, just run:
     $ ./keystore stop
 ```
 
-==== TROUBLESHOOTING ====
+### TROUBLESHOOTING
 
 If you killed your server with `SIGKILL` or the program encountered any error that did this, you might encounter problems with semaphores and/or shared memory that is already existing.
 
