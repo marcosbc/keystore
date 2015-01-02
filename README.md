@@ -54,10 +54,7 @@ If you want to install it into your system, just run the following command:
     $ sudo make install
 ```
 
-Finally, you can remove the folder in which you compiled the application:
-```
-    $ rm -rf ~/keystore
-```
+If you decide to install it in your system, you can remove the repository.
 
 ### SERVER USAGE
 
