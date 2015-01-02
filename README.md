@@ -44,9 +44,13 @@ First, clone this GIT repository in your local computer:
     $ git clone https://github.com/marcosbc/keystore.git
 ```
 
-Next, compile and install! It is as easy as:
+Next, compile! It is as easy as:
 ```
     $ make
+```
+
+If you want to install it into your system, just run the following command:
+```
     $ sudo make install
 ```
 
