@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # PROJECT: Development of a key-value database (includes client)
-# AUTHORS: Marcos Bjorkelund
+# AUTHORS: Marcos Bjorkelund and Adrian Marcelo Anillo
 # NOTICE:  THIS WAS CREATED FOR A SUBJECT IN UNIVERSITY OF SEVILLE'S
 #          HIGHER TECHNICAL SCHOOL OF ENGINEERING AS A COURSE PROJECT.
 #          PLEASE DO NOT DISTRIBUTE OR PUBLISH ANY MODIFICATION UNTIL
@@ -17,5 +17,5 @@ then
 	mkdir -p $LOGS_DIR
 fi
 
-./clear_memory.bin 2>> $LOGS_DIR/error.log
+./keystore_clear_memory.bin 2>> $LOGS_DIR/error.log
 ./keystored.bin >> $LOGS_DIR/access.log 2>> $LOGS_DIR/error.log &
