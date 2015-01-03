@@ -1,7 +1,7 @@
 SRCDIR = ./src
 BINDIR = ./bin
 
-all: create_bin clear_memory keystore keystored elapsed
+all: create_bin keystore_clear_memory keystore keystored keystore_elapsed
 	cp $(SRCDIR)/daemon.sh $(BINDIR)/keystored
 	cp $(SRCDIR)/keystore.sh $(BINDIR)/keystore
 
@@ -11,11 +11,11 @@ keystored: $(SRCDIR)/daemon.c $(SRCDIR)/daemon.h $(SRCDIR)/server.c $(SRCDIR)/se
 keystore: $(SRCDIR)/keystore.c $(SRCDIR)/keystore.h $(SRCDIR)/client.c $(SRCDIR)/client.h $(SRCDIR)/common.c $(SRCDIR)/common.h $(SRCDIR)/sems.c $(SRCDIR)/sems.h
 	gcc -W -Wall $(SRCDIR)/keystore.c $(SRCDIR)/client.c $(SRCDIR)/memory.c $(SRCDIR)/disk.c $(SRCDIR)/common.c $(SRCDIR)/database.c $(SRCDIR)/sems.c -o $(BINDIR)/keystore.bin -lpthread
 
-elapsed: $(SRCDIR)/elapsed.c
-	gcc -W -Wall $(SRCDIR)/elapsed.c -o $(BINDIR)/elapsed.bin
+keystore_elapsed: $(SRCDIR)/elapsed.c
+	gcc -W -Wall $(SRCDIR)/elapsed.c -o $(BINDIR)/keystore_elapsed.bin
 
-clear_memory: $(SRCDIR)/clear.c $(SRCDIR)/common.c $(SRCDIR)/common.h $(SRCDIR)/types.h $(SRCDIR)/sems.c $(SRCDIR)/sems.h
-	gcc -W -Wall $(SRCDIR)/clear.c $(SRCDIR)/common.c $(SRCDIR)/sems.c -o $(BINDIR)/clear_memory.bin -lpthread
+keystore_clear_memory: $(SRCDIR)/clear.c $(SRCDIR)/common.c $(SRCDIR)/common.h $(SRCDIR)/types.h $(SRCDIR)/sems.c $(SRCDIR)/sems.h
+	gcc -W -Wall $(SRCDIR)/clear.c $(SRCDIR)/common.c $(SRCDIR)/sems.c -o $(BINDIR)/keystore_clear_memory.bin -lpthread
 
 create_bin:
 	mkdir -p $(BINDIR)
