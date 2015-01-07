@@ -18,4 +18,4 @@ then
 fi
 
 ./keystore_clear_memory.bin 2>> $LOGS_DIR/error.log
-./keystored.bin >> $LOGS_DIR/access.log 2>> $LOGS_DIR/error.log &
+nohup ./keystored.bin >> $LOGS_DIR/access.log 2>> $LOGS_DIR/error.log &
