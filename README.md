@@ -18,10 +18,6 @@ We have two different modes of usage:
 
 - Linked lists: To store data dynamically and with the fewer limits possible.
 
-- Multi-processing (via `fork`)
-  * Parent: Alter the database(s) in memory (which does not wait for the child to finish)
-  * Child: Alter the databases' files in the HDD.
-
 - Signals: To stop the server when a `Ctrl-C` or `SIGINT` is sent to the process.
 
 - Threads: for searching through multiple databases

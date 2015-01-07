@@ -13,7 +13,7 @@
 #include <sys/un.h> // socket related things
 #include <sys/stat.h> // mkfifo
 #include <sys/timeb.h> 
-#include <unistd.h> // fork
+#include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h> // O_CREAT, ...
 #include <signal.h>
@@ -33,7 +33,6 @@ void store_stop()
 	stop_server = 1;
 }
 
-// TODO: add fork
 int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
                 char *db_names, store_db **dbs, store_entry ***entries)
 {
