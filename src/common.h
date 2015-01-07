@@ -32,8 +32,6 @@
 #define ERR_NONE 0
 #define ERR_SESSION 2
 #define ERR_SESSION_MSG "you already have a session running"
-#define ERR_FORK 3
-#define ERR_FORK_MSG "fork returned a number less than zero"
 #define ERR_ALLOC 5
 #define ERR_ALLOC_MSG "memory allocation returned NULL"
 #define ERR_STORE_SHMCREATE 10
@@ -60,16 +58,6 @@
 #define ERR_DB_MSG "db not found"
 #define ERR_ENTRY 31
 #define ERR_ENTRY_MSG "entry not found"
-#define ERR_PID_NUM 35
-#define ERR_PID_NUM_MSG "pid has wrong format"
-#define ERR_PID_EXIST 36
-#define ERR_PID_EXIST_MSG "the pid file already exists"
-#define ERR_PID_CREATE 37
-#define ERR_PID_CREATE_MSG "couldn't create the pid file: check permissions"
-#define ERR_FIFO_CREATE 38
-#define ERR_FIFO_CREATE_MSG "the fifo pipe couldn't be created"
-#define ERR_FIFO_OPEN 39
-#define ERR_FIFO_OPEN_MSG "the fifo pipe couln't be opened"
 #define ERR_SOCKETEXIST 40
 #define ERR_SOCKETCREATE 41
 #define ERR_BIND 42

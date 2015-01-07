@@ -12,7 +12,7 @@
 #include <sys/un.h> // socket related things
 #include <sys/stat.h> // mkfifo
 #include <sys/shm.h> // 
-#include <unistd.h> // fork
+#include <unistd.h>
 #include <fcntl.h> // O_CREAT, ...
 #include <pthread.h>
 #include "common.h"
