@@ -15,9 +15,6 @@ void print_error_case(int error)
 {
 	switch(error)
 	{
-		case ERR_FORK:
-			print_error(ERR_FORK_MSG);
-			break;
 		case ERR_ALLOC:
 			print_error(ERR_ALLOC_MSG);
 			break;
