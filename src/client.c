@@ -8,7 +8,6 @@
 #include <pthread.h>
 #include "common.h"
 #include "client.h"
-#include "disk.h"
 #include "database.h"
 #include "sems.h"
 

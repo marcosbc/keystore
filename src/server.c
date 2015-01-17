@@ -11,7 +11,6 @@
 #include "common.h"
 #include "server.h"
 #include "memory.h"
-#include "disk.h"
 #include "database.h"
 #include "sems.h"
 
@@ -525,10 +524,6 @@ int store_server_init()
 		}
 
 		printf("stopping server...\n");
-
-		// here we should ideally keep a daemon running to
-		// check that our memory-values are the same as our
-		// disk values
 	}
 
 	DEBUG_PRINT("notice: socket 's' has value '%d'\n", s);
