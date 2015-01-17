@@ -1,12 +1,3 @@
-/*
- * PROJECT: Development of a key-value database (includes client)
- * AUTHORS: Marcos Bjorkelund and Adrian Marcelo Anillo
- * NOTICE:  THIS WAS CREATED FOR A SUBJECT IN UNIVERSITY OF SEVILLE'S
- *          HIGHER TECHNICAL SCHOOL OF ENGINEERING AS A COURSE PROJECT.
- *          PLEASE DO NOT DISTRIBUTE OR PUBLISH ANY MODIFICATION UNTIL
- *          IT GETS RELEASED PUBLICLY.
- */
-
 #include <stdio.h>
 #include <stdarg.h> // va_list and related functions
 #include "common.h"

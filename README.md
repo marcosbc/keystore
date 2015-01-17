@@ -1,9 +1,6 @@
 # keystore
 ### Development of a key-value database (includes client). Created for the Subject of Operating Systems.
-##### Authors: Marcos Bjorkelund and Adrian Marcelo Anillo
-
-**NOTICE:**  THIS WAS CREATED FOR A SUBJECT IN UNIVERSITY OF SEVILLE'S HIGHER TECHNICAL SCHOOL OF ENGINEERING AS A COURSE PROJECT.
-PLEASE DO NOT DISTRIBUTE OR PUBLISH ANY MODIFICATION UNTIL IT GETS RELEASED PUBLICLY.
+##### Authors: Marcos Bjørkelund (code and idea) and Adrián Marcelo Anillo (presentation)
 
 ### DESCRIPTION
 
