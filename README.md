@@ -26,7 +26,9 @@ We could also have used message queues instead, which can be seen as ideal but w
 
 ### FUTURE IMPROVEMENTS
 
-- Improve the data-sending between server and client (by reducing the number of `read()` and `write()`). Try to remove the need for `ack` messages.
+- Create a more complete and console-like client.
+- Allow setting more than one value at once.
+- Improve the data-sending between server and client (by reducing the number of necessary `read()` and `write()` operations). Try to remove the need for `ack` messages.
 - Allow the server to treat multiple requests at once (`fork()` for each new request).
 - Add support for collections: `collection.key`, `collection.subcollection.key`, etcetera.
 - Use configuration files to store settings for the server.
