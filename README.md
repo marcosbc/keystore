@@ -14,33 +14,23 @@ We have two different modes of usage:
 ### TECHNIQUES USED
 
 - Linked lists: To store data dynamically and with the fewer limits possible.
-
 - Signals: To stop the server when a `Ctrl-C` or `SIGINT` is sent to the process.
-
 - Threads: for searching through multiple databases
-
 - Shared memory: to store the server's settings
-
 - Semaphores: for altering self-reserved memory for threading and shared memory (which stores the settings) operations
-
 - Clocks: To measure the time a request took and the time the server has been running right before a shutdown.
-
 - UNIX Sockets: To send a request-data between the server and the client. We are using bi-directional UNIX sockets (with `SOCK_STREAM`).
+
 We could have used FIFO pipes but we opted by this, since it is something more modern and client-server specific.
 We could also have used message queues instead, which can be seen as ideal but we want our client and server to be connected, and to know when one is not alive. Using sockets also allows us to send non-static data, e.g. strings with a dynamic length.
 
 ### FUTURE IMPROVEMENTS
 
 - Improve the data-sending between server and client (by reducing the number of `read()` and `write()`). Try to remove the need for `ack` messages.
-
 - Allow the server to treat multiple requests at once (`fork()` for each new request).
-
 - Add support for collections: `collection.key`, `collection.subcollection.key`, etcetera.
-
 - Use configuration files to store settings for the server.
-
 - Allow to store data permanently (so that it persists even if you restart the server).
-
 - Add support for horizontal scaling.
 
 ### INSTALLATION STEPS
