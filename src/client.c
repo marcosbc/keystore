@@ -14,10 +14,6 @@
 int store_set(char key[], char *value, int num_dbs, char *dbs[])
 {
 	int error = ERR_NONE;
-	char mode = '\0';
-	int val_len = strlen(value);
-	char *dbs_corrected = NULL;
-	char *key_corrected = NULL;
 	int i;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
@@ -27,9 +23,16 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	key_t shm_key = ftok(".", KEY_ID);
 	char *ack_msg = NULL; // stores the ack message
 	char *ack_buff = NULL; // stores the response
-	int max_db_len;
-	int max_key_len;
-	int ack_len;
+	int max_db_len = 0;
+	int max_key_len = 0;
+	int ack_len = 0;
+	store_req *req = NULL;
+	store_req_info req_inf;
+	// initialize our request info structure
+	req_inf.mode = store->modes[STORE_MODE_SET_ID];
+	req_inf.size = sizeof(store_req_data) + (val_len + 1) * sizeof(char)
+	               + (num_dbs * max_db_len) * sizeof(char)
+
 
 	if(! sems_open())
 	{
@@ -60,8 +63,7 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		DEBUG_PRINT("get first set of values from shm, store=%p\n", store);
 
 		// set our mode and other variables
-		mode = store->modes[STORE_MODE_SET_ID];
-		DEBUG_PRINT("mode=%c\n", mode);
+		DEBUG_PRINT("mode=%c\n", req_inf.mode);
 		max_db_len = store->max_db_len;
 		DEBUG_PRINT("max_db_len=%d\n", max_db_len);
 		max_key_len = store->max_key_len;
@@ -101,50 +103,41 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		print_perror("connect");
 		error = ERR_CONNECT;
 	}
-	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * max_db_len,
-	                                                 sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) calloc(max_key_len,
-	                                                 sizeof(char)))))
+	else if(NULL == (req = (store_req *) malloc(req_inf.size)))
 	{
 		error = ERR_ALLOC;
 		print_perror("calloc");
 	}
 	else
 	{
+		// init request data
+		req->val_len = strlen(value);
+		req->num_dbs = num_dbs;
+
+		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
+		req->val = req + sizeof(store_req); // value and dbs right after request
+		req->dbs = req + sizeof(store_req) + (val_len + 1) * sizeof(char);
+
 		// correct key and dbs variable's size
-		strncpy(key_corrected, key, max_key_len - 1);
-		key_corrected[max_key_len - 1] = '\0';
+		strncpy(req->key, key, max_key_len - 1);
+		req->key[max_key_len - 1] = '\0';
+
+		// copy the value (we already have reserved for the needed length)
+		strcpy(req->val, value);
 
 		for(i = 0; i < num_dbs; i++)
 		{
-			strncpy(dbs_corrected + i * max_db_len, dbs[i],
-			        max_db_len- 1);
-			*(dbs_corrected + (i + 1) * max_db_len - 1) = '\0';
+			strncpy(req->dbs + i * max_db_len, dbs[i],
+			        max_db_len - 1);
+			*(req->dbs + (i + 1) * max_db_len - 1) = '\0';
 		}
 
 		// send the data
-		DEBUG_PRINT("writing mode '%c' to server\n", mode);
-		write(s, &mode, sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
-		write(s, key_corrected, max_key_len * sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
-		write(s, &num_dbs, sizeof(int));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
-		write(s, dbs_corrected, num_dbs * max_db_len * sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing val_len '%d' to server\n", val_len);
-		write(s, &val_len, sizeof(int));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing value '%s' to server\n", value);
-		write(s, value, val_len * sizeof(char));
+		DEBUG_PRINT("writing request\n");
+		write(s, &req_inf, sizeof(store_req_info));
+		// read(s, ack_buff, ack_len); // is it necessary?
+		write(s, req, req_len);
+		// read(s, ack_buff, ack_len); // setting mode doesn't read any result
 		
 		DEBUG_PRINT("writing finished\n");
 		
@@ -167,8 +160,7 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 	}
 
 	free(ack_buff);
-	free(dbs_corrected);
-	free(key_corrected);
+	free(req);
 
 	return error;
 }
@@ -176,9 +168,6 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 int store_get(char key[], int num_dbs, char *dbs[])
 {
 	int error = ERR_NONE;
-	char mode = '\0';
-	char *dbs_corrected = NULL;
-	char *key_corrected = NULL;
 	int i = 0;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
@@ -193,6 +182,15 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	int max_db_len;
 	int max_key_len;
 	int ack_len;
+	store_req *req = NULL;
+	store_req_info req_inf;
+	store_res *res = NULL; // response
+	store_res_info res_inf; // response
+	// initialize our request info structure
+	req_inf.mode = store->modes[STORE_MODE_SET_ID];
+	req_inf.size = sizeof(store_req_data)
+	               + (num_dbs * max_db_len) * sizeof(char)
+
 
 	if(! sems_open())
 	{
@@ -248,10 +246,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		print_perror("connect");
 		error = ERR_CONNECT;
 	}
-	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * max_db_len,
-	                                                 sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) calloc(max_key_len,
-	                                                 sizeof(char)))))
+	else if(NULL == (req = (store_req *) malloc(req_inf.size)))
 	{
 		error = ERR_ALLOC;
 		print_perror("calloc");
@@ -260,9 +255,22 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	{
 		DEBUG_PRINT("copy key and dbs\n");
 
+		// initialize our request info structure
+		req_inf.mode = store->modes[STORE_MODE_SET_ID];
+		req_inf.size = sizeof(store_req_data) + (val_len + 1) * sizeof(char)
+		               + (num_dbs * max_db_len) * sizeof(char)
+
+		// init request data
+		req->val_len = 0; // we don't know it yet
+		req->num_dbs = num_dbs;
+
+		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
+		req->val = NULL;
+		req->dbs = req + sizeof(store_req);
+
 		// correct key and dbs variable's size
-		strncpy(key_corrected, key, max_key_len - 1);
-		key_corrected[max_key_len - 1] = '\0';
+		strncpy(req->key, key, max_key_len - 1);
+		req->key[max_key_len - 1] = '\0';
 
 		// we will be using single pointers instead of tables to copy db
 		for(i = 0; i < num_dbs; i++)
@@ -274,26 +282,16 @@ int store_get(char key[], int num_dbs, char *dbs[])
 			            dbs_corrected + i * max_db_len);
 		}
 
-		DEBUG_PRINT("writing to socket\n");
-
 		// send the data
-		DEBUG_PRINT("writing mode '%c' to server\n", mode);
-		write(s, &mode, sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
-		write(s, key_corrected, max_key_len * sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
-		write(s, &num_dbs, sizeof(int));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
-		write(s, dbs_corrected, num_dbs * max_db_len * sizeof(char));
-
+		DEBUG_PRINT("writing request\n");
+		write(s, &req_inf, sizeof(store_req_info));
+		// read(s, ack_buff, ack_len); // is it necessary?
+		write(s, req, req_len);
+		// read(s, ack_buff, ack_len); // setting mode doesn't read any result
+		
 		DEBUG_PRINT("writing finished\n");
 		
+		// get the response
 		for(i = 0; i < num_dbs && error == ERR_NONE; i++)
 		{
 			DEBUG_PRINT("\nREAD ITERATION %d\n", i);
@@ -304,14 +302,14 @@ int store_get(char key[], int num_dbs, char *dbs[])
 			// for(i = 0; i < num_dbs; i++) entries[i];...
 			read(s, &val_len, sizeof(int));
 			DEBUG_PRINT("val_len \"%d\" read\n", val_len);
-			write(s, ack_msg, ack_len);
-			DEBUG_PRINT("ack written\n");
+			// write(s, ack_msg, ack_len);
+			// DEBUG_PRINT("ack written\n");
 			
 			DEBUG_PRINT("current value pointer before calloc for %d bytes: %p\n",
 			            (val_len + 1) * ((int) sizeof(char)), val);
 			val = (char *) calloc((val_len + 1), sizeof(char));
-			DEBUG_PRINT("finished calloc\n");
-			DEBUG_PRINT("value pointer after calloc: %p\n", val);
+			// DEBUG_PRINT("finished calloc\n");
+			// DEBUG_PRINT("value pointer after calloc: %p\n", val);
 
 			// memory alloc
 			if(NULL != val)
@@ -319,11 +317,11 @@ int store_get(char key[], int num_dbs, char *dbs[])
 				DEBUG_PRINT("reading value\n");
 				read(s, val, (val_len + 1) * sizeof(char));
 				DEBUG_PRINT("val \"%s\" read\n", val);
-				write(s, ack_msg, ack_len);
-				DEBUG_PRINT("ack written\n");
+				// write(s, ack_msg, ack_len);
+				// DEBUG_PRINT("ack written\n");
 	
-				printf("%s: %s=%s\n", dbs_corrected + i * max_db_len,
-				       key_corrected, val);
+				printf("%s: %s=%s\n", req->dbs + i * max_db_len,
+				       req->key, val);
 				DEBUG_PRINT("---DONE---\n");
 			}
 			else
@@ -350,8 +348,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	}
 
 	free(ack_buff);
-	free(dbs_corrected);
-	free(key_corrected);
+	free(req);
 	
 	return error;
 }
@@ -359,13 +356,13 @@ int store_get(char key[], int num_dbs, char *dbs[])
 int store_halt()
 {
 	int error = ERR_NONE;
-	char mode = '\0';
 	int len;
 	int s = -1; // client socket
 	struct sockaddr_un addr;
 	int shmid = -1;
 	key_t shm_key = ftok(".", KEY_ID);
 	store_info *store = NULL;
+	store_req_info req_inf;
 
 	if(! sems_open())
 	{
@@ -386,7 +383,8 @@ int store_halt()
 		read_lock();
 		
 		// set our mode
-		mode = store->modes[STORE_MODE_STOP_ID];
+		req_inf.mode = store->modes[STORE_MODE_STOP_ID];
+		req_inf.size = 0;
 
 		// set sockaddr information values
 		memset(&addr, 0, sizeof(addr));
@@ -413,7 +411,7 @@ int store_halt()
 	else
 	{
 		// send halt character to daemon (for shutdown)
-		write(s, &mode, sizeof(char));
+		write(s, &req_inf, sizeof(store_req_info));
 
 		DEBUG_PRINT("notice: database shutting down\n");
 	}

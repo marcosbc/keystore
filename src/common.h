@@ -77,6 +77,29 @@ typedef struct info {
 	char modes[STORE_NUM_MODES];
 } store_info;
 
+typedef struct request_info {
+	char mode;
+	size_t size;
+} store_req_info;
+
+typedef struct request {
+	char key[MAX_KEY_SIZE];
+	int val_len;
+	char *val;
+	int num_dbs;
+	char *dbs; // simulates dbs[num_dbs][MAX_DB_SIZE]
+} store_req;
+
+typedef struct response_info {	
+	int num; // number of responses
+	int size; // size of the response
+} store_res_info;
+
+typedef struct response {
+	int *len; // array of length of responses
+	char *val; // values (simulares val[num])
+} store_res;
+
 void print_error_case(int error);
 void print_error(const char *msg, ...);
 void print_perror(const char *msg);

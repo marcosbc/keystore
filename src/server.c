@@ -233,7 +233,6 @@ int store_server_act(int s, store_db **dbs)
 	int client_s = -1; // remote socket
 	struct sockaddr_un client;
 	socklen_t client_len = sizeof(client);
-	char mode;
 	char key[MAX_KEY_SIZE];
 	int num_dbs; // 32-bit and 64-bit intercompatibility
 	char *db_names = NULL;
@@ -242,6 +241,10 @@ int store_server_act(int s, store_db **dbs)
 	store_entry **result = (store_entry **) NULL;
 	int i = 0;
 	char ack_buff[STORE_ACK_LEN];
+	store_req *req = NULL;
+	store_req_info req_inf;
+	store_res *res = NULL;
+	store_res_info res_inf;
 	
 	DEBUG_PRINT("waiting for a connection...\n");
 
@@ -262,70 +265,49 @@ int store_server_act(int s, store_db **dbs)
 		#endif
 
 		// read data
-		read(client_s, &mode, sizeof(char));
-		write(client_s, STORE_ACK, STORE_ACK_LEN);
-		DEBUG_PRINT("got mode \"%c\" from client\n", mode);
+		read(client_s, &req_inf, sizeof(store_req_info));
+		//write(client_s, STORE_ACK, STORE_ACK_LEN);
+		DEBUG_PRINT("got mode \"%c\" from client\n", req_inf.mode);
 
-		if(mode == STORE_MODE_SET || mode == STORE_MODE_GET)
+		if(req_inf.mode == STORE_MODE_SET || req_inf.mode == STORE_MODE_GET)
 		{
-			DEBUG_PRINT("setting or getting mode\n");
-			read(client_s, &key, MAX_KEY_SIZE * sizeof(char));
-			write(client_s, STORE_ACK, STORE_ACK_LEN);
-			DEBUG_PRINT("got key \"%s\" from client\n", key);
-
-			read(client_s, &num_dbs, sizeof(int));
-			write(client_s, STORE_ACK, STORE_ACK_LEN);
-			DEBUG_PRINT("got num_dbs \"%d\" from client\n", num_dbs);
-			
-			db_names = (char *) calloc(num_dbs * MAX_DB_SIZE, sizeof(char));
-			if(db_names == NULL)
+			if(req_inf.size <= 0)
 			{
-				print_perror("calloc");
+				// error?
+			}
+			else if(NULL != (req = (store_req *) malloc(req_inf.size)))
+			{
 				error = ERR_ALLOC;
 			}
 			else
 			{
-				read(client_s, db_names, num_dbs * MAX_DB_SIZE * sizeof(char));
+				DEBUG_PRINT("setting or getting mode\n");
+				read(client_s, req, req_inf.size);
+				
+				//write(client_s, STORE_ACK, STORE_ACK_LEN);
+				DEBUG_PRINT("got key \"%s\" from client\n", req->key);
+				DEBUG_PRINT("got num_dbs \"%d\" from client\n", req->val_len);
+				DEBUG_PRINT("got val_len \"%d\" from client\n", req->num_dbs);
+				DEBUG_PRINT("got value \"%s\" from client\n", req->val);
+				DEBUG_PRINT("got key \"%s\" from client\n", req->key);
+
 				for(i = 0; i < num_dbs; i++)
 				{
 					DEBUG_PRINT("got dbs[%d] \"%s\" from client\n", i,
-					            db_names + i*MAX_DB_SIZE);
+					            req->dbs + i * MAX_DB_SIZE);
 				}
 
 				// if we're setting a value, we must also read it
 				if(mode == STORE_MODE_SET)
 				{
 					DEBUG_PRINT("setting mode\n");
-					write(client_s, STORE_ACK, STORE_ACK_LEN);
 
-					// first, get our val_len
-					read(client_s, &val_len, sizeof(int));
-					write(client_s, STORE_ACK, STORE_ACK_LEN);
-					DEBUG_PRINT("got val_len \"%d\" from client\n", val_len);
-
-					// we don't know how big our value will be
-					// val_len + 1 -> we must allow the \0 to be the last char
-					val = (char *) calloc((val_len + 1), sizeof(char));
-			
-					if(val == NULL)
-					{
-						print_perror("calloc");
-						error = ERR_ALLOC;
-					}
-					else
-					{
-						// ack is not needed here, since we'll return a result
-						/* val_len = */read(client_s, val, val_len * sizeof(char));
-						val[val_len] = '\0'; // ensure we reach end of string
-						DEBUG_PRINT("got value \"%s\" from client\n", val);
-
-						DEBUG_PRINT("proceeding to write\n");
-						// now that we have everything, call function for setting
-						/* error = */ store_write(key, val, num_dbs, db_names,
-						                          dbs, &result);
+					DEBUG_PRINT("proceeding to write\n");
+					// now that we have everything, call function for setting
+					/* error = */ store_write(req->key, req->val, req->num_dbs,
+					                          req->dbs, dbs, &result);
 						
-						// and finished, since we don't respond to set reqs
-					}
+					// and finished, since we don't respond to set reqs
 				}
 				// 'get' mode
 				else
@@ -334,8 +316,8 @@ int store_server_act(int s, store_db **dbs)
 					
 					DEBUG_PRINT("proceeding to read\n");
 					// now that we have everything, call function for setting
-					/* error = */ store_read(key, num_dbs, db_names, *dbs,
-					                         &result);
+					/* error = */ store_read(req->key, req->num_dbs, req->dbs,
+					                         *dbs, &result);
 
 					DEBUG_PRINT("got result %p\n", &result);
 
