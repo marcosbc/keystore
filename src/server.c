@@ -23,6 +23,8 @@ void store_stop()
 	stop_server = 1;
 }
 
+// entries -> pointer of a table of store_entry* variables
+// it must be a pointer since we don't have its address 
 int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
                 char *db_names, store_db **dbs, store_entry ***entries)
 {
@@ -46,33 +48,23 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 	}
 	else
 	{
-		DEBUG_PRINT("alloc ok, entries=%p ent_inf=%p thids=%p\n",
-		            *entries, ent_inf, thids);
-
-		// parent - alter the database in memory
 		for(; i < num_dbs && ! therr; i++)
 		{
 			DEBUG_PRINT("setting key\n");
 			// create the entry information for setting
 			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
 			ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
-			DEBUG_PRINT("setting value\n");
 			ent_inf[i].value = val;
-			DEBUG_PRINT("setting dbname\n");
 			ent_inf[i].db_name = db_names + i * MAX_DB_SIZE;
-			DEBUG_PRINT("setting entry\n");
 			ent_inf[i].entry = NULL;
-			DEBUG_PRINT("setting dbs\n");
 			ent_inf[i].dbs = dbs;
-			DEBUG_PRINT("setting error\n");
 			ent_inf[i].error = 0;
-			DEBUG_PRINT("creating thread\n");
-				
+
 			// create our thread
 			therr = pthread_create(&thids[i], NULL, memory_set,
 			                       &ent_inf[i]);
 
-			DEBUG_PRINT("notice: [parent] thread#%d %d (\"%s\" => \
+			DEBUG_PRINT("notice: thread#%d %d (\"%s\" => \
 \"%s\") to insert in db \"%s\"\n",
 			            i, (int) thids[i], key, val,
 						ent_inf[i].db_name);
@@ -90,38 +82,39 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 		// now, end our threads
 		for(i = 0; i < num_dbs && ! therr; i++)
 		{
-			DEBUG_PRINT("notice: [parent] ending thread#parent-%d %d...\n",
+			DEBUG_PRINT("notice: ending thread#parent-%d %d...\n",
 			            i, (int) thids[i]);
 				
 			therr = pthread_join(thids[i], NULL);
 
 			if(therr != 0)
 			{
+				DEBUG_PRINT("notice: thread %d ended with error %d\n",
+				            thids[i], therr);
 				err = ERR_THRJOIN;
 			}
 			else
 			{
 				(*entries)[i] = ent_inf[i].entry;
 				err = ent_inf[i].error;
-				DEBUG_PRINT("notice: [parent] ended thread#parent-%d %d \
+				DEBUG_PRINT("notice: ended thread#parent-%d %d \
 returned value %d\n",
 			                i, (int) thids[i], ent_inf[i].error);
 
 				if((*entries)[i] == NULL)
 				{
-					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
+					DEBUG_PRINT("notice: %s: found *NOTHING* for \"%s\"\n",
 					            db_names + i*MAX_DB_SIZE, key);
 				}
 				else
 				{
-					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
+					DEBUG_PRINT("notice: %s: found \"%s\": value \"%s\"\n",
 					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key,
 								(*entries)[i]->val);
 				}
 			}
 		}
 
-		DEBUG_PRINT("freeing ent_inf=%p thids=%p\n", ent_inf, thids);
 		free(ent_inf);
 		free(thids);
 	}
@@ -170,8 +163,8 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 			                       &ent_inf[i]);
 
 			// check val, it's null probably
-			DEBUG_PRINT("notice: thread#%d %d (key \"%s\" \
- to search in db \"%s\")\n",
+			DEBUG_PRINT("notice: thread#%d %d (key \"%s\") \
+ to search in db \"%s\"\n",
 			            i, (int) thids[i], key, ent_inf[i].db_name);
 
 			if(therr != 0)
@@ -194,7 +187,8 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 
 			if(therr != 0)
 			{
-				DEBUG_PRINT("thread ended, error %d\n", therr);
+				DEBUG_PRINT("notice: thread %d ended with error %d\n",
+				            thids[i], therr);
 				err = ERR_THRJOIN;
 			}
 			else
@@ -206,12 +200,12 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 
 				if((*entries)[i] == NULL)
 				{
-					DEBUG_PRINT("%s: found *NO* entry for \"%s\"\n",
+					DEBUG_PRINT("notice: %s: found *NOTHING* for \"%s\"\n",
 					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key);
 				}
 				else
 				{
-					DEBUG_PRINT("%s: found entry for \"%s\": value \"%s\"\n",
+					DEBUG_PRINT("notice: %s: found \"%s\": val \"%s\"\n",
 					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key,
 								(*entries)[i]->val);
 				}
@@ -219,7 +213,6 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 		}
 	}
 
-	DEBUG_PRINT("freeing ent_inf=%p thids=%p\n", ent_inf, thids);
 	free(thids);
 	free(ent_inf);
 
@@ -228,25 +221,29 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 
 int store_server_act(int s, store_db **dbs)
 {
-	struct timeb start_tm, end_tm;
 	int error = 0;
+	struct timeb start_tm, end_tm;
+	int i = 0;
+
+	// variables used for TCP communication
 	int client_s = -1; // remote socket
 	struct sockaddr_un client;
 	socklen_t client_len = sizeof(client);
-	char key[MAX_KEY_SIZE];
-	int num_dbs; // 32-bit and 64-bit intercompatibility
-	char *db_names = NULL;
-	int val_len = 0; // 32-bit and 64-bit intercompatibility
-	char *val = NULL;
-	store_entry **result = (store_entry **) NULL;
-	int i = 0;
-	char ack_buff[STORE_ACK_LEN];
+
+	// requests and responses
 	store_req *req = NULL;
 	store_req_info req_inf;
 	store_res *res = NULL;
-	store_res_info res_inf;
-	
-	DEBUG_PRINT("waiting for a connection...\n");
+	store_res_info res_inf = {
+		.num = 0;
+		.size = 0;
+		.error = ERR_NONE;
+	};
+
+	// result of the request query
+	store_entry **result = (store_entry **) NULL;
+
+	DEBUG_PRINT("notice: waiting for a connection...\n");
 
 	// accept connection (if it fails, it is because server was closed: no error)
 	if(-1 != (client_s = accept(s, (struct sockaddr *) &client, &client_len)))
@@ -258,118 +255,106 @@ int store_server_act(int s, store_db **dbs)
 		DEBUG_PRINT("has t_start\n");
 	
 		#ifdef __DEBUG__
+		read_lock();
 		if(*dbs != NULL)
 		{
 			print_existing_databases(*dbs);
 		}
+		read_unlock();
 		#endif
 
-		// read data
-		read(client_s, &req_inf, sizeof(store_req_info));
-		//write(client_s, STORE_ACK, STORE_ACK_LEN);
-		DEBUG_PRINT("got mode \"%c\" from client\n", req_inf.mode);
+		// read data from the client
+		read(client_s, req_inf, sizeof(struct request_info));
 
-		if(req_inf.mode == STORE_MODE_SET || req_inf.mode == STORE_MODE_GET)
+		if(req_inf.size != 0)
 		{
-			if(req_inf.size <= 0)
-			{
-				// error?
-			}
-			else if(NULL != (req = (store_req *) malloc(req_inf.size)))
+			if(NULL == (req = (struct request) malloc(req_inf.size)))
 			{
 				error = ERR_ALLOC;
+				res_inf.error = error;
+				print_perror("malloc");
 			}
 			else
 			{
-				DEBUG_PRINT("setting or getting mode\n");
 				read(client_s, req, req_inf.size);
-				
-				//write(client_s, STORE_ACK, STORE_ACK_LEN);
-				DEBUG_PRINT("got key \"%s\" from client\n", req->key);
-				DEBUG_PRINT("got num_dbs \"%d\" from client\n", req->val_len);
-				DEBUG_PRINT("got val_len \"%d\" from client\n", req->num_dbs);
-				DEBUG_PRINT("got value \"%s\" from client\n", req->val);
-				DEBUG_PRINT("got key \"%s\" from client\n", req->key);
 
-				for(i = 0; i < num_dbs; i++)
+				#ifdef __DEBUG__
+				DEBUG_PRINT("notice: got request %p from client:\n", req);
+				DEBUG_PRINT("\t- key \"%s\"\n", req->key);
+				DEBUG_PRINT("\t- val_len \"%d\"\n", req->val_len);
+				DEBUG_PRINT("\t- num_dbs \"%d\"\n", req->num_dbs);
+				DEBUG_PRINT("\t- value at %p \"%s\"\n", req->val, req->val);
+				DEBUG_PRINT("\t- dbs %p\n", req->dbs);
+				for(i = 0; i < req->num_dbs; i++)
 				{
-					DEBUG_PRINT("got dbs[%d] \"%s\" from client\n", i,
+					DEBUG_PRINT("\t\t* dbs[%d] \"%s\"\n", i,
 					            req->dbs + i * MAX_DB_SIZE);
 				}
+				#endif
 
-				// if we're setting a value, we must also read it
-				if(mode == STORE_MODE_SET)
+				switch(req_inf.mode)
 				{
-					DEBUG_PRINT("setting mode\n");
+					case STORE_MODE_SET:
+						/* error = */ store_write(req->key, req->val, req->num_dbs,
+						                          req->dbs, dbs, &result);
+						break;
+					case STORE_MODE_GET:
+						/* error = */ store_read(req->key, req->num_dbs, req->dbs,
+						                         *dbs, &result);
 
-					DEBUG_PRINT("proceeding to write\n");
-					// now that we have everything, call function for setting
-					/* error = */ store_write(req->key, req->val, req->num_dbs,
-					                          req->dbs, dbs, &result);
-						
-					// and finished, since we don't respond to set reqs
-				}
-				// 'get' mode
-				else
-				{
-					DEBUG_PRINT("getting mode\n");
-					
-					DEBUG_PRINT("proceeding to read\n");
-					// now that we have everything, call function for setting
-					/* error = */ store_read(req->key, req->num_dbs, req->dbs,
-					                         *dbs, &result);
-
-					DEBUG_PRINT("got result %p\n", &result);
-
-					// send the result
-					for(i = 0; i < num_dbs; i++)
-					{
-						DEBUG_PRINT("\nWRITE ITERATION %d\n", i);
-
-						// if we found an entry, write it
-						if(result != NULL && result[i] != NULL)
+						// calculate the size of the response
+						for(i = 0; i < req->num_dbs; i++)
 						{
-							DEBUG_PRINT("going for iteration\n");
-							val_len = (int) strlen(result[i]->val);
-							DEBUG_PRINT("writing val len %d\n", val_len);
-							write(client_s, &val_len, sizeof(int));
-							read(client_s, &ack_buff, STORE_ACK_LEN);
-							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
-							
-							write(client_s, result[i]->val,
-							                (val_len + 1) * sizeof(char));
-							DEBUG_PRINT("result \"%s\" written\n", result[i]->val);
-							read(client_s, &ack_buff, STORE_ACK_LEN);
-							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
+							res_inf.size += strlen(result[i]->val) + 1;
 						}
-						// we want to send a response even if the "result"
-						// variable is null
+						// size of struct and each val_len
+						res_inf.size += req->num_dbs * sizeof(size_t)
+						                + sizeof(struct response_info);
+
+						// now, allocate it
+						if(NULL == (res = (struct result *) malloc(res_inf.size)))
+						{
+							res_inf.size = 0;
+							res_inf.error = ERR_ALLOC;
+						}
 						else
 						{
-							val_len = 0;
-							DEBUG_PRINT("val_len is ZERO, not found\n");
-							write(client_s, &val_len, sizeof(int));
-							read(client_s, &ack_buff, STORE_ACK_LEN);
-							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
+							res->val_len = (size_t *) (res + 1);
+							res->val = (size_t *) (res->val_len + req->num_dbs);
 
-							write(client_s, "", (val_len + 1) * sizeof(char));
-							DEBUG_PRINT("result \"\" written\n");
-							read(client_s, &ack_buff, STORE_ACK_LEN);
-							DEBUG_PRINT("read ack \"%s\"\n", ack_buff);
+							// now, copy the result to the response variable
+							for(i = 0; i < req->num_dbs; i++)
+							{
+								strcpy(res->val, result[i]->val);
+								*(res->val_len + i) = strlen(res->val);
+							}
 						}
-
-						DEBUG_PRINT("---DONE---\n\n");
-					}
+						break;
+					default:
+						res_inf.error = 1; // = ERR_INVALID_MODE
 				}
-				DEBUG_PRINT("clearing result %p\n", result);
-				free(result); // it is an array, so we can free it
-				result = NULL;
+
+				write(client_s, res_inf, sizeof(struct response_info));
+			}
+
+			if(res_inf.size != 0)
+			{
+				write(client_s, res, res_inf.size);
 			}
 		}
-		// formal server stop so no error
 		else
 		{
-			store_stop();
+			switch(req_inf.mode)
+			{
+				case STORE_MODE_STOP:
+					store_stop(); // no error
+					break;
+				default:
+					res_inf.error = 1; // = ERR_INCORRECT_MODE
+			}
+
+			// send the result back to the client
+			send(client_s, &res_inf, sizeof(struct response_info));
 		}
 
 		// close connection
@@ -381,6 +366,9 @@ int store_server_act(int s, store_db **dbs)
 		       (float) 1000.0 * (end_tm.time - start_tm.time)
 			           + (end_tm.millitm - start_tm.millitm));
 	}
+
+	free(res);
+	free(req);
 
 	return error;
 }
@@ -405,10 +393,10 @@ int store_server_init()
 	sigaddset(&act.sa_mask, SIGINT);
 	sigaction(SIGINT, &act, NULL);
 
-	DEBUG_PRINT("notice: database starting\n");
-
-	// ignore our sigpipe signal
+	// ignore SIGPIPE
 	signal(SIGPIPE, SIG_IGN);
+
+	DEBUG_PRINT("notice: database starting\n");
 
 	// why or? so we make sure there are no conflicts
 	if(-1 != (shmid = shmget(shm_key, sizeof(struct info), 0664))
@@ -457,8 +445,6 @@ int store_server_init()
 
 		// set public configuration info in our shared memory
 		store->pid = getpid();
-		store->ack_len = STORE_ACK_LEN;
-		strcpy(store->ack_msg, STORE_ACK);
 		store->max_sock_len = MAX_SOCK_PATH_SIZE;
 		strcpy(store->sock_path, STORE_SOCKET_PATH);
 		store->max_key_len = MAX_KEY_SIZE;
@@ -467,6 +453,7 @@ int store_server_init()
 		store->modes[STORE_MODE_SET_ID] = STORE_MODE_SET;
 		store->modes[STORE_MODE_GET_ID] = STORE_MODE_GET;
 		store->modes[STORE_MODE_STOP_ID] = STORE_MODE_STOP;
+
 		write_unlock();
 	}
 

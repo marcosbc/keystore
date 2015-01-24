@@ -74,11 +74,6 @@ typedef struct info {
 	char modes[STORE_NUM_MODES];
 } store_info;
 
-struct request_info {
-	char mode;
-	size_t size;
-};
-
 /*
 struct entry {
 	char key[MAX_KEY_SIZE];
@@ -87,25 +82,30 @@ struct entry {
 };
 */
 
+struct request_info {
+	char mode;
+	size_t size;
+};
+
 typedef struct request {
 	char key[MAX_KEY_SIZE];
 	int num_dbs;
 	char *val;
-	int val_len;
+	size_t val_len;
 	char *dbs; // simulates dbs[num_dbs][MAX_DB_SIZE]
 };
 
 struct response_info {
 	int num; // number of values to send
-	int size; // size of the response
 	int error; // if error is 0, it went ok
+	size_t size; // size of the response
 };
 
-// dbs not needed, key not yet
+// dbs not needed (results are ordered), key not yet
 struct response {
-	int num_dbs;
+	// techically not needed thanks to '\0'
+	size_t *val_len; // array of length of responses
 	char *val; // values (simulates val[num])
-	int *val_len; // array of length of responses
 };
 
 void print_error_case(int error);

@@ -29,11 +29,7 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 
 	// result and request
 	struct request *req = NULL;
-	struct request_info req_inf = {
-		.mode = store->modes[STORE_MODE_SET_ID];
-		.size = sizeof(struct request) + (val_len + 1) * sizeof(char)
-		        + (num_dbs * max_db_len) * sizeof(char);
-	};
+	struct request_info req_inf;
 
 	if(! sems_open())
 	{
@@ -73,6 +69,12 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 					 (int) store->pid,
 					 store->max_sock_len, store->sock_path, store->max_key_len,
 					 store->max_val_len, store->max_db_len);
+
+		// set request info
+		req_inf = {
+			.mode = store->modes[STORE_MODE_STOP_ID];
+			.size = sizeof(struct request) + (num_dbs * max_db_len) * sizeof(char);
+		};
 
 		// if we don't unlock before data is sent, the server and client
 		// will block (this is only critical in this mode)
@@ -143,7 +145,7 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		{
 			DEBUG_PRINT("notice: something went wrong on the server side");
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-			error = res->error;
+			error = res_inf->error;
 		}
 		else if(NULL == (res = (struct response *) calloc(1, res_inf.size)))
 		{
@@ -155,11 +157,10 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		{
 			read(s, res, res_inf.size);
 			DEBUG_PRINT("read res%p err=%d\n", res);
-			DEBUG_PRINT("len=%p val=%p", res->len, res->val);
+			DEBUG_PRINT("len=%p val=%p", res->val_len, res->val);
 
 			DEBUG_PRINT("notice: *** DONE ***\n\n");
 		}
-
 	}
 
 	if(s >= 0)
@@ -201,10 +202,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	struct response *res = NULL;
 	struct response_info res_inf; // response
 	struct request *req = NULL;
-	struct request_info req_inf = {
-		.mode = store->modes[STORE_MODE_STOP_ID];
-		.size = sizeof(struct request) + (num_dbs * max_db_len) * sizeof(char);
-	};
+	struct request_info req_inf;
 
 	// initialize our semaphores and begin the semaphore lock
 	if(! sems_open())
@@ -233,7 +231,13 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
-		
+
+		// set request info
+		req_inf = {
+			.mode = store->modes[STORE_MODE_STOP_ID];
+			.size = sizeof(struct request) + (num_dbs * max_db_len) * sizeof(char);
+		};
+
 		read_unlock();
 	}
 
@@ -299,7 +303,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		{
 			DEBUG_PRINT("notice: something went wrong on the server side");
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-			error = res->error;
+			error = res_inf->error;
 		}
 		else if(NULL == (res = (struct response *) calloc(1, res_inf.size)))
 		{
@@ -311,7 +315,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		{
 			read(s, res, res_inf.size);
 			DEBUG_PRINT("read res%p err=%d\n", res);
-			DEBUG_PRINT("res err=%d len=%p val=%p", res->error, res->len, res->val);
+			DEBUG_PRINT("len=%p val=%p", res->val_len, res->val);
 
 			if(NULL == res->val)
 			{
@@ -325,7 +329,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 				{
 					printf("%s: %s=%s\n", req->dbs + i * max_db_len,
 					                      key,
-										  res->val + i * val_len);
+										  res->val + i * (res->val_len + 1));
 				}
 
 				DEBUG_PRINT("notice: *** DONE ***\n\n");
@@ -367,10 +371,7 @@ int store_halt()
 
 	// result and request `headers'
 	struct response_info res_inf; // response
-	struct request_info req_inf = {
-		.mode = store->modes[STORE_MODE_STOP_ID];
-		.size = 0;
-	};
+	struct request_info req_inf;
 
 	if(! sems_open())
 	{
@@ -394,7 +395,13 @@ int store_halt()
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
-		
+
+		// set request info
+		req_inf = {
+			.mode = store->modes[STORE_MODE_STOP_ID];
+			.size = 0;
+		};
+
 		read_unlock();
 	}
 	
@@ -448,4 +455,5 @@ int store_halt()
 	return error;
 }
 
+// common actions in store_set and store_get
 // int send_data(int s, int val_len, char *val);
