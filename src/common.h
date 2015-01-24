@@ -61,14 +61,11 @@
 #define STORE_MODE_GET_ID 1
 #define STORE_MODE_STOP_ID 2
 
-#define STORE_ACK_LEN 3 // strlen('o', 'k') + 1 ('\0')
 #define MAX_SOCK_PATH_SIZE 100
 
 // for extracting info from shared memory
 typedef struct info {
 	pid_t pid;
-	int ack_len;
-	char ack_msg[STORE_ACK_LEN];
 	int max_sock_len;
 	char sock_path[MAX_SOCK_PATH_SIZE];
 	int max_key_len;
@@ -77,28 +74,39 @@ typedef struct info {
 	char modes[STORE_NUM_MODES];
 } store_info;
 
-typedef struct request_info {
+struct request_info {
 	char mode;
 	size_t size;
-} store_req_info;
+};
+
+/*
+struct entry {
+	char key[MAX_KEY_SIZE];
+	int val_len;
+	char *value;
+};
+*/
 
 typedef struct request {
 	char key[MAX_KEY_SIZE];
-	int val_len;
-	char *val;
 	int num_dbs;
+	char *val;
+	int val_len;
 	char *dbs; // simulates dbs[num_dbs][MAX_DB_SIZE]
-} store_req;
+};
 
-typedef struct response_info {	
-	int num; // number of responses
+struct response_info {
+	int num; // number of values to send
 	int size; // size of the response
-} store_res_info;
+	int error; // if error is 0, it went ok
+};
 
-typedef struct response {
-	int *len; // array of length of responses
-	char *val; // values (simulares val[num])
-} store_res;
+// dbs not needed, key not yet
+struct response {
+	int num_dbs;
+	char *val; // values (simulates val[num])
+	int *val_len; // array of length of responses
+};
 
 void print_error_case(int error);
 void print_error(const char *msg, ...);
