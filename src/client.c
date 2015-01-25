@@ -28,6 +28,8 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	int max_key_len = 0;
 
 	// result and request
+	struct response *res = NULL;
+	struct response_info res_inf; // response
 	struct request *req = NULL;
 	struct request_info req_inf;
 
@@ -62,7 +64,6 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
-		len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 		DEBUG_PRINT("got server config pid=%d, socklen=%d \
 sockpath=%s keylen=%d vallen=%d dblen=%d\n",
@@ -71,10 +72,9 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 					 store->max_val_len, store->max_db_len);
 
 		// set request info
-		req_inf = {
-			.mode = store->modes[STORE_MODE_STOP_ID];
-			.size = sizeof(struct request) + (num_dbs * max_db_len) * sizeof(char);
-		};
+		req_inf.mode = store->modes[STORE_MODE_SET_ID];
+		req_inf.size = (num_dbs * max_db_len) * sizeof(char)
+		               + sizeof(struct request);
 
 		// if we don't unlock before data is sent, the server and client
 		// will block (this is only critical in this mode)
@@ -108,7 +108,7 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 
 		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
 		req->val = (char *) (req + 1);
-		req->dbs = (char *) (req->val + val_len + 1);
+		req->dbs = (char *) (req->val + req->val_len + 1);
 
 		// correct key
 		strncpy(req->key, key, max_key_len - 1);
@@ -127,13 +127,13 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 
 		// send the data
 		DEBUG_PRINT("notice: writing request\n");
-		write(s, req_inf, sizeof(struct request_info));
-		write(s, req, &req_inf.size);
+		write(s, &req_inf, sizeof(struct request_info));
+		write(s, req, req_inf.size);
 
 		// read the result
 		DEBUG_PRINT("notice: getting response\n");
 		read(s, &res_inf, sizeof(struct response_info));
-		DEBUG_PRINT("read res_info num=%d sz=%d\n", res_inf.num, res_inf.size);
+		DEBUG_PRINT("read res_info num=%d sz=%zu\n", res_inf.num, res_inf.size);
 
 		if(res_inf.size <= 0 || res_inf.num != num_dbs)
 		{
@@ -145,7 +145,7 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		{
 			DEBUG_PRINT("notice: something went wrong on the server side");
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-			error = res_inf->error;
+			error = res_inf.error;
 		}
 		else if(NULL == (res = (struct response *) calloc(1, res_inf.size)))
 		{
@@ -156,7 +156,7 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		else
 		{
 			read(s, res, res_inf.size);
-			DEBUG_PRINT("read res%p err=%d\n", res);
+			DEBUG_PRINT("read res%p\n", res);
 			DEBUG_PRINT("len=%p val=%p", res->val_len, res->val);
 
 			DEBUG_PRINT("notice: *** DONE ***\n\n");
@@ -223,7 +223,6 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		read_lock();
 
 		// set our mode and other variables
-		mode = store->modes[STORE_MODE_GET_ID];
 		max_db_len = store->max_db_len;
 		max_key_len = store->max_key_len;
 
@@ -233,10 +232,9 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		strcpy(addr.sun_path, store->sock_path);
 
 		// set request info
-		req_inf = {
-			.mode = store->modes[STORE_MODE_STOP_ID];
-			.size = sizeof(struct request) + (num_dbs * max_db_len) * sizeof(char);
-		};
+		req_inf.mode = store->modes[STORE_MODE_GET_ID];
+		req_inf.size = (num_dbs * max_db_len) * sizeof(char)
+		               + sizeof(struct request);
 
 		read_unlock();
 	}
@@ -286,12 +284,12 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		// send the data
 		DEBUG_PRINT("notice: sending request\n");
 		write(s, &req_inf, sizeof(struct request_info));
-		write(s, req, &req_inf.size);
+		write(s, req, req_inf.size);
 
 		// read the result
 		DEBUG_PRINT("notice: getting response\n");
 		read(s, &res_inf, sizeof(struct response_info));
-		DEBUG_PRINT("read res_info num=%d sz=%d\n", res_inf.num, res_inf.size);
+		DEBUG_PRINT("read res_info num=%d sz=%zu\n", res_inf.num, res_inf.size);
 
 		if(res_inf.size <= 0 || res_inf.num != num_dbs)
 		{
@@ -303,7 +301,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		{
 			DEBUG_PRINT("notice: something went wrong on the server side");
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-			error = res_inf->error;
+			error = res_inf.error;
 		}
 		else if(NULL == (res = (struct response *) calloc(1, res_inf.size)))
 		{
@@ -314,7 +312,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		else
 		{
 			read(s, res, res_inf.size);
-			DEBUG_PRINT("read res%p err=%d\n", res);
+			DEBUG_PRINT("read res%p\n", res);
 			DEBUG_PRINT("len=%p val=%p", res->val_len, res->val);
 
 			if(NULL == res->val)
@@ -329,7 +327,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 				{
 					printf("%s: %s=%s\n", req->dbs + i * max_db_len,
 					                      key,
-										  res->val + i * (res->val_len + 1));
+										  res->val + *(res->val_len + i));
 				}
 
 				DEBUG_PRINT("notice: *** DONE ***\n\n");
@@ -397,10 +395,8 @@ int store_halt()
 		strcpy(addr.sun_path, store->sock_path);
 
 		// set request info
-		req_inf = {
-			.mode = store->modes[STORE_MODE_STOP_ID];
-			.size = 0;
-		};
+		req_inf.mode = store->modes[STORE_MODE_STOP_ID];
+		req_inf.size = 0;
 
 		read_unlock();
 	}

@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// #define __DEBUG__
+#define __DEBUG__
 #ifdef __DEBUG__
 #define DEBUG_PRINT(...) \
 { \
@@ -76,7 +76,7 @@ typedef struct info {
 
 /*
 struct entry {
-	char key[MAX_KEY_SIZE];
+	char *key;
 	int val_len;
 	char *value;
 };
@@ -87,11 +87,11 @@ struct request_info {
 	size_t size;
 };
 
-typedef struct request {
-	char key[MAX_KEY_SIZE];
+struct request {
+	char *key;
 	int num_dbs;
 	char *val;
-	size_t val_len;
+	int val_len;
 	char *dbs; // simulates dbs[num_dbs][MAX_DB_SIZE]
 };
 
@@ -104,7 +104,7 @@ struct response_info {
 // dbs not needed (results are ordered), key not yet
 struct response {
 	// techically not needed thanks to '\0'
-	size_t *val_len; // array of length of responses
+	int *val_len; // array of length of responses
 	char *val; // values (simulates val[num])
 };
 

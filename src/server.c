@@ -90,7 +90,7 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			if(therr != 0)
 			{
 				DEBUG_PRINT("notice: thread %d ended with error %d\n",
-				            thids[i], therr);
+				            (int) thids[i], therr);
 				err = ERR_THRJOIN;
 			}
 			else
@@ -188,7 +188,7 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 			if(therr != 0)
 			{
 				DEBUG_PRINT("notice: thread %d ended with error %d\n",
-				            thids[i], therr);
+				            (int) thids[i], therr);
 				err = ERR_THRJOIN;
 			}
 			else
@@ -231,13 +231,13 @@ int store_server_act(int s, store_db **dbs)
 	socklen_t client_len = sizeof(client);
 
 	// requests and responses
-	store_req *req = NULL;
-	store_req_info req_inf;
-	store_res *res = NULL;
-	store_res_info res_inf = {
-		.num = 0;
-		.size = 0;
-		.error = ERR_NONE;
+	struct request *req = NULL;
+	struct request_info req_inf;
+	struct response *res = NULL;
+	struct response_info res_inf = {
+		.num = 0,
+		.size = 0,
+		.error = ERR_NONE
 	};
 
 	// result of the request query
@@ -264,11 +264,11 @@ int store_server_act(int s, store_db **dbs)
 		#endif
 
 		// read data from the client
-		read(client_s, req_inf, sizeof(struct request_info));
+		read(client_s, &req_inf, sizeof(struct request_info));
 
 		if(req_inf.size != 0)
 		{
-			if(NULL == (req = (struct request) malloc(req_inf.size)))
+			if(NULL == (req = (struct request *) malloc(req_inf.size)))
 			{
 				error = ERR_ALLOC;
 				res_inf.error = error;
@@ -308,19 +308,21 @@ int store_server_act(int s, store_db **dbs)
 							res_inf.size += strlen(result[i]->val) + 1;
 						}
 						// size of struct and each val_len
-						res_inf.size += req->num_dbs * sizeof(size_t)
+						res_inf.size += (size_t) req->num_dbs
+						                         * sizeof(req->val_len)
 						                + sizeof(struct response_info);
 
 						// now, allocate it
-						if(NULL == (res = (struct result *) malloc(res_inf.size)))
+						if((res = (struct response *) malloc(res_inf.size))
+						   == NULL)
 						{
 							res_inf.size = 0;
 							res_inf.error = ERR_ALLOC;
 						}
 						else
 						{
-							res->val_len = (size_t *) (res + 1);
-							res->val = (size_t *) (res->val_len + req->num_dbs);
+							res->val_len = (int *) (res + 1);
+							res->val = (char *) (res->val_len + req->num_dbs);
 
 							// now, copy the result to the response variable
 							for(i = 0; i < req->num_dbs; i++)
@@ -334,10 +336,10 @@ int store_server_act(int s, store_db **dbs)
 						res_inf.error = 1; // = ERR_INVALID_MODE
 				}
 
-				write(client_s, res_inf, sizeof(struct response_info));
+				write(client_s, &res_inf, sizeof(struct response_info));
 			}
 
-			if(res_inf.size != 0)
+			if(res_inf.size > 0)
 			{
 				write(client_s, res, res_inf.size);
 			}
@@ -354,7 +356,7 @@ int store_server_act(int s, store_db **dbs)
 			}
 
 			// send the result back to the client
-			send(client_s, &res_inf, sizeof(struct response_info));
+			write(client_s, &res_inf, sizeof(struct response_info));
 		}
 
 		// close connection
