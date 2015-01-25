@@ -88,24 +88,28 @@ struct request_info {
 };
 
 struct request {
-	char *key;
 	int num_dbs;
-	char *val;
-	int val_len;
-	char *dbs; // simulates dbs[num_dbs][MAX_DB_SIZE]
+	int val_size;
+
+	// the request will also include right after this:
+	// - a string for the key
+	// - a string for the value (if any)
+	// - a simulated array of the databases (single-pointer array of values)
 };
 
 struct response_info {
-	int num; // number of values to send
 	int error; // if error is 0, it went ok
 	size_t size; // size of the response
 };
 
 // dbs not needed (results are ordered), key not yet
 struct response {
+	int num; // number of values to send
+
+	// the response will also include right after this:
+	// - an array of integers of the size of each val: int val_size[num]
+	// - a simulated array of values (single-pointer array of strings)
 	// techically not needed thanks to '\0'
-	int *val_len; // array of length of responses
-	char *val; // values (simulates val[num])
 };
 
 void print_error_case(int error);

@@ -137,6 +137,7 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 	if(dbs == NULL)
 	{
 		err = ERR_DB;
+		DEBUG_PRINT("dbs is NULL\n");
 	}
 	else if(NULL == (*entries = (store_entry **) calloc(num_dbs,
 	                                                   sizeof(store_entry *)))
@@ -144,19 +145,29 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 	                                                sizeof(struct entry_inf)))
 	     || NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
 	{
+		DEBUG_PRINT("err at alloc\n");
 		err = ERR_ALLOC;
 	}
 	else
 	{
+		DEBUG_PRINT("looping...\n");
 		for(i = 0; i < num_dbs && ! therr; i++)
 		{
+			DEBUG_PRINT("loop %d\n", i);
+
 			// create the entry information for setting
 			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
+			DEBUG_PRINT("got key\n");
 			ent_inf[i].value = NULL;
+			DEBUG_PRINT("got val\n");
 			ent_inf[i].db_name = db_names + i * MAX_DB_SIZE;
+			DEBUG_PRINT("got db_name\n");
 			ent_inf[i].entry = NULL;
+			DEBUG_PRINT("got entry\n");
 			ent_inf[i].dbs = &dbs;
+			DEBUG_PRINT("got dbs\n");
 			ent_inf[i].error = 0;
+			DEBUG_PRINT("got err\n");
 
 			// create our thread -> ERROR???
 			therr = pthread_create(&thids[i], NULL, memory_get,
@@ -225,6 +236,15 @@ int store_server_act(int s, store_db **dbs)
 	struct timeb start_tm, end_tm;
 	int i = 0;
 
+	// key, value and db pointers for the request
+	char *key_ptr = NULL;
+	char *val_ptr = NULL;
+	char *dbs_ptr = NULL;
+
+	// array of value-sizes and result value for the response
+	int *res_size_ptr = NULL;
+	char *res_val_ptr = NULL;
+
 	// variables used for TCP communication
 	int client_s = -1; // remote socket
 	struct sockaddr_un client;
@@ -235,13 +255,12 @@ int store_server_act(int s, store_db **dbs)
 	struct request_info req_inf;
 	struct response *res = NULL;
 	struct response_info res_inf = {
-		.num = 0,
 		.size = 0,
 		.error = ERR_NONE
 	};
 
 	// result of the request query
-	store_entry **result = (store_entry **) NULL;
+	store_entry **result = NULL;
 
 	DEBUG_PRINT("notice: waiting for a connection...\n");
 
@@ -278,38 +297,47 @@ int store_server_act(int s, store_db **dbs)
 			{
 				read(client_s, req, req_inf.size);
 
+				// recalculate pointers with variable
+				key_ptr = (char *) (req + 1);
+				val_ptr = (char *) (key_ptr + MAX_KEY_SIZE);
+				dbs_ptr = (char *) (val_ptr + req->val_size);
+
 				#ifdef __DEBUG__
 				DEBUG_PRINT("notice: got request %p from client:\n", req);
-				DEBUG_PRINT("\t- key \"%s\"\n", req->key);
-				DEBUG_PRINT("\t- val_len \"%d\"\n", req->val_len);
+				DEBUG_PRINT("\t- val_len \"%d\"\n", req->val_size);
 				DEBUG_PRINT("\t- num_dbs \"%d\"\n", req->num_dbs);
-				DEBUG_PRINT("\t- value at %p \"%s\"\n", req->val, req->val);
-				DEBUG_PRINT("\t- dbs %p\n", req->dbs);
+				DEBUG_PRINT("\t- value at %p: \"%s\"\n", val_ptr, val_ptr);
+				DEBUG_PRINT("\t- dbs %p\n", dbs_ptr);
+				DEBUG_PRINT("\t- key \"%s\"\n", key_ptr);
 				for(i = 0; i < req->num_dbs; i++)
 				{
 					DEBUG_PRINT("\t\t* dbs[%d] \"%s\"\n", i,
-					            req->dbs + i * MAX_DB_SIZE);
+					            dbs_ptr + i * MAX_DB_SIZE);
 				}
 				#endif
 
 				switch(req_inf.mode)
 				{
 					case STORE_MODE_SET:
-						/* error = */ store_write(req->key, req->val, req->num_dbs,
-						                          req->dbs, dbs, &result);
+						/* error = */ store_write(key_ptr, val_ptr, req->num_dbs,
+						                          dbs_ptr, dbs, &result);
 						break;
 					case STORE_MODE_GET:
-						/* error = */ store_read(req->key, req->num_dbs, req->dbs,
-						                         *dbs, &result);
+						/* error = */ store_read(key_ptr, req->num_dbs,
+						                         dbs_ptr, *dbs, &result);
 
-						// calculate the size of the response
-						for(i = 0; i < req->num_dbs; i++)
+						if(result != NULL)
 						{
-							res_inf.size += strlen(result[i]->val) + 1;
+							// calculate the size of the response
+							for(i = 0; i < req->num_dbs; i++)
+							{
+								res_inf.size += strlen(result[i]->val) + 1;
+							}
 						}
+
 						// size of struct and each val_len
 						res_inf.size += (size_t) req->num_dbs
-						                         * sizeof(req->val_len)
+						                         * sizeof(req->val_size)
 						                + sizeof(struct response_info);
 
 						// now, allocate it
@@ -321,14 +349,19 @@ int store_server_act(int s, store_db **dbs)
 						}
 						else
 						{
-							res->val_len = (int *) (res + 1);
-							res->val = (char *) (res->val_len + req->num_dbs);
+							res->num = i;
+							res_size_ptr = (int *) (res + 1);
+							res_val_ptr = (char *) (res_size_ptr + res->num);
 
 							// now, copy the result to the response variable
 							for(i = 0; i < req->num_dbs; i++)
 							{
-								strcpy(res->val, result[i]->val);
-								*(res->val_len + i) = strlen(res->val);
+								strcpy(res_val_ptr, result[i]->val);
+								*res_size_ptr = strlen(res_val_ptr) + 1;
+
+								// move to the next element
+								res_val_ptr += *res_size_ptr;
+								res_size_ptr++;
 							}
 						}
 						break;

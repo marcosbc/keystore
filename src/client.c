@@ -16,6 +16,11 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	int error = ERR_NONE;
 	int i;
 
+	// for setting the variables easier in the request address
+	char *key_ptr = NULL;
+	char *val_ptr = NULL;
+	char *dbs_ptr = NULL;
+
 	// variables for communication via TCP
 	int s = -1;
 	struct sockaddr_un addr;
@@ -28,7 +33,6 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	int max_key_len = 0;
 
 	// result and request
-	struct response *res = NULL;
 	struct response_info res_inf; // response
 	struct request *req = NULL;
 	struct request_info req_inf;
@@ -73,8 +77,8 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 
 		// set request info
 		req_inf.mode = store->modes[STORE_MODE_SET_ID];
-		req_inf.size = (num_dbs * max_db_len) * sizeof(char)
-		               + sizeof(struct request);
+		req_inf.size = (max_key_len + strlen(value) + 1 + num_dbs * max_db_len)
+		               * sizeof(char) + sizeof(struct request);
 
 		// if we don't unlock before data is sent, the server and client
 		// will block (this is only critical in this mode)
@@ -103,39 +107,40 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		DEBUG_PRINT("notice: preparing for setting");
 
 		// init request data
-		req->val_len = strlen(value);
+		req->val_size = strlen(value) + 1;
 		req->num_dbs = num_dbs;
 
 		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
-		req->val = (char *) (req + 1);
-		req->dbs = (char *) (req->val + req->val_len + 1);
+		key_ptr = (char *) (req + 1);
+		val_ptr = (char *) (key_ptr + max_key_len);
+		dbs_ptr = (char *) (val_ptr + req->val_size);
 
 		// correct key
-		strncpy(req->key, key, max_key_len - 1);
-		req->key[max_key_len - 1] = '\0';
+		strncpy(key_ptr, key, max_key_len - 1);
+		key_ptr[max_key_len - 1] = '\0';
 
 		// copy the value (we already have reserved for the needed length)
-		strcpy(req->val, value);
+		strcpy(val_ptr, value);
 
 		// copy dbs and correct
 		for(i = 0; i < num_dbs; i++)
 		{
-			strncpy(req->dbs + i * max_db_len, dbs[i],
+			strncpy(dbs_ptr + i * max_db_len, dbs[i],
 			        max_db_len - 1);
-			*(req->dbs + (i + 1) * max_db_len - 1) = '\0';
+			*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
 		}
 
 		// send the data
-		DEBUG_PRINT("notice: writing request\n");
+		DEBUG_PRINT("notice: sending request\n");
 		write(s, &req_inf, sizeof(struct request_info));
 		write(s, req, req_inf.size);
 
 		// read the result
 		DEBUG_PRINT("notice: getting response\n");
 		read(s, &res_inf, sizeof(struct response_info));
-		DEBUG_PRINT("read res_info num=%d sz=%zu\n", res_inf.num, res_inf.size);
+		DEBUG_PRINT("read res_info err=%d sz=%zu\n", res_inf.error, res_inf.size);
 
-		if(res_inf.size <= 0 || res_inf.num != num_dbs)
+		if(res_inf.size <= 0)
 		{
 			DEBUG_PRINT("notice: malformed response\n");
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
@@ -147,18 +152,8 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
 			error = res_inf.error;
 		}
-		else if(NULL == (res = (struct response *) calloc(1, res_inf.size)))
-		{
-			print_perror("calloc");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-			error = ERR_ALLOC;
-		}
 		else
 		{
-			read(s, res, res_inf.size);
-			DEBUG_PRINT("read res%p\n", res);
-			DEBUG_PRINT("len=%p val=%p", res->val_len, res->val);
-
 			DEBUG_PRINT("notice: *** DONE ***\n\n");
 		}
 	}
@@ -177,7 +172,6 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 	}
 
 	free(req);
-	free(res);
 
 	return error;
 }
@@ -186,6 +180,15 @@ int store_get(char key[], int num_dbs, char *dbs[])
 {
 	int error = ERR_NONE;
 	int i = 0;
+
+	// for setting the variables easier in the request address
+	char *key_ptr = NULL;
+	char *val_ptr = NULL;
+	char *dbs_ptr = NULL;
+
+	// array of value-sizes and result value for the response
+	int *res_size_ptr = NULL;
+	char *res_val_ptr = NULL;
 
 	// variables for communication via TCP
 	int s = -1; // client socket
@@ -233,8 +236,8 @@ int store_get(char key[], int num_dbs, char *dbs[])
 
 		// set request info
 		req_inf.mode = store->modes[STORE_MODE_GET_ID];
-		req_inf.size = (num_dbs * max_db_len) * sizeof(char)
-		               + sizeof(struct request);
+		req_inf.size = (max_key_len + 1 + num_dbs * max_db_len) // 1 = strlen("")
+		               * sizeof(char) + sizeof(struct request);
 
 		read_unlock();
 	}
@@ -262,24 +265,37 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		DEBUG_PRINT("notice: preparing for getting");
 
 		// init request data
-		req->val_len = 0;
+		req->val_size = 1; // strlen("")
 		req->num_dbs = num_dbs;
+		DEBUG_PRINT("val_len and num_dbs\n");
 
 		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
-		req->val = NULL;
-		req->dbs = (char *) (req + 1);
+		key_ptr = (char *) (req + 1);
+		val_ptr = (char *) (key_ptr + max_key_len);
+		dbs_ptr = (char *) (val_ptr + req->val_size);
 
 		// correct key
-		strncpy(req->key, key, max_key_len - 1);
-		req->key[max_key_len - 1] = '\0';
+		strncpy(key_ptr, key, max_key_len - 1);
+		key_ptr[max_key_len - 1] = '\0';
+		DEBUG_PRINT("key------\n");
+
+		// set our value as an empty string
+		*val_ptr = '\0';
 
 		// copy dbs and correct
 		for(i = 0; i < num_dbs; i++)
 		{
-			strncpy(req->dbs + i * max_db_len, dbs[i],
+			strncpy(dbs_ptr + i * max_db_len, dbs[i],
 			        max_db_len - 1);
-			*(req->dbs + (i + 1) * max_db_len - 1) = '\0';
+			*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
+			DEBUG_PRINT("db %d\n", i);
 		}
+
+		DEBUG_PRINT("%p: key %p (+%d), val %p (+%d) and dbs %p (+%d)\n",
+					req, key_ptr, (int) sizeof(req), val_ptr, 0,
+					dbs_ptr, max_key_len);
+		DEBUG_PRINT("values: key %s, val \"%s\" and dbs[0] %s\n",
+					key_ptr, val_ptr, dbs_ptr);
 
 		// send the data
 		DEBUG_PRINT("notice: sending request\n");
@@ -289,9 +305,9 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		// read the result
 		DEBUG_PRINT("notice: getting response\n");
 		read(s, &res_inf, sizeof(struct response_info));
-		DEBUG_PRINT("read res_info num=%d sz=%zu\n", res_inf.num, res_inf.size);
+		DEBUG_PRINT("read res_info err=%d sz=%zu\n", res_inf.error, res_inf.size);
 
-		if(res_inf.size <= 0 || res_inf.num != num_dbs)
+		if(res_inf.size <= 0)
 		{
 			DEBUG_PRINT("notice: malformed response\n");
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
@@ -313,25 +329,26 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		{
 			read(s, res, res_inf.size);
 			DEBUG_PRINT("read res%p\n", res);
-			DEBUG_PRINT("len=%p val=%p", res->val_len, res->val);
 
-			if(NULL == res->val)
-			{
-				DEBUG_PRINT("notice: result's val is NULL\n");
-				DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-			}
-			else
-			{
-				// now we checked everything is ok, print result
-				for(i = 0; i < num_dbs; i++)
-				{
-					printf("%s: %s=%s\n", req->dbs + i * max_db_len,
-					                      key,
-										  res->val + *(res->val_len + i));
-				}
+			// calculate pointers
+			res_size_ptr = (int *) (res + 1);
+			res_val_ptr = (char *) (res_size_ptr + res->num);
 
-				DEBUG_PRINT("notice: *** DONE ***\n\n");
+			DEBUG_PRINT("len=%p val=%p\n", res_size_ptr, val_ptr);
+			DEBUG_PRINT("len=%d\n", *res_size_ptr);
+			DEBUG_PRINT("val=%p\n", val_ptr);
+
+			// now we checked everything is ok, print result
+			for(i = 0; i < num_dbs; i++)
+			{
+				printf("%s: %s=%s\n", dbs_ptr + i * max_db_len,
+				                      key,
+									  res_val_ptr); // -----
+				res_val_ptr += *res_size_ptr;
+				res_size_ptr++;
 			}
+
+			DEBUG_PRINT("notice: *** DONE ***\n\n");
 		}
 	}
 
@@ -424,7 +441,7 @@ int store_halt()
 
 		read(s, &res_inf, sizeof(struct response_info));
 
-		if(res_inf.size != 0 || res_inf.num != 0)
+		if(res_inf.size <= 0)
 		{
 			DEBUG_PRINT("notice: malformed response");
 			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
@@ -452,4 +469,8 @@ int store_halt()
 }
 
 // common actions in store_set and store_get
-// int send_data(int s, int val_len, char *val);
+/* int send_data(int s, struct request_info *req_inf, struct request **req,
+              struct response_info *res_inf, struct response **res)
+{
+
+} */
