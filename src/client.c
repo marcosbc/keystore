@@ -129,31 +129,26 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 
 			// communicate with the server
 			error = store_act(s, &req_inf, &req, &res_inf, NULL);
+
+			if(error == ERR_NONE && res_inf.size > 0)
+			{
+				error = ERR_SIZE;
+			}
 		}
 	}
 
 	// if the response-info was received correctly
+	#ifdef __DEBUG__
 	if(error == ERR_NONE)
 	{
-		DEBUG_PRINT("temp-notice: everything ok\n");
-		if(res_inf.size > 0)
-		{
-			error = ERR_SIZE;
-		}
-		// else { *** DONE *** }
-
-		#ifdef __DEBUG__
-		if(error == ERR_NONE)
-		{
-			DEBUG_PRINT("notice: *** DONE ***\n\n");
-		}
-		else
-		{
-			DEBUG_PRINT("notice: something went wrong on the server side");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-		}
-		#endif
+		DEBUG_PRINT("notice: *** DONE ***\n\n");
 	}
+	else
+	{
+		DEBUG_PRINT("notice: something went wrong on the server side");
+		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+	}
+	#endif
 
 	if(s >= 0)
 	{
@@ -242,7 +237,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		read_unlock();
 	}
 
-	if(error != ERR_NONE)
+	if(error == ERR_NONE)
 	{
 		// initialize our socket
 		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
@@ -291,47 +286,46 @@ int store_get(char key[], int num_dbs, char *dbs[])
 
 			// communicate with the server
 			error = store_act(s, &req_inf, &req, &res_inf, &res);
-		}
-	}
 
-	// did we receive the response in store_act without error?
-	if(error == ERR_NONE)
-	{
-		// can never be less than zero, but just in case we change types
-		if(res_inf.size <= 0)
-		{
-			error = ERR_SIZE;
-		}
-		else
-		{
-			// calculate pointers
-			res_size_ptr = (int *) (res + 1);
-			res_val_ptr = (char *) (res_size_ptr + res->num);
-
-			// now we checked everything is ok, print result
-			for(i = 0; i < num_dbs; i++)
+			// can never be less than zero, but just in case we change types
+			if(error == ERR_NONE && res_inf.size <= 0)
 			{
-				// print result
-				printf("%s: %s=%s\n", dbs_ptr + i * max_db_len,
-				                      key,
-				                      res_val_ptr);
-				res_val_ptr += *res_size_ptr;
-				res_size_ptr++;
+				error = ERR_SIZE;
 			}
 		}
-
-		#ifdef __DEBUG__
-		if(error == ERR_NONE)
-		{
-			DEBUG_PRINT("notice: *** DONE ***\n\n");
-		}
-		else
-		{
-			DEBUG_PRINT("notice: something went wrong on the server side");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-		}
-		#endif
 	}
+
+	// is the response correct?
+	if(error == ERR_NONE)
+	{
+		// calculate pointers
+		res_size_ptr = (int *) (res + 1);
+		res_val_ptr = (char *) (res_size_ptr + res->num);
+
+		// now we checked everything is ok, print result
+		for(i = 0; i < num_dbs; i++)
+		{
+			// print result
+			printf("%s: %s=%s\n", dbs_ptr + i * max_db_len,
+			                      key,
+			                      res_val_ptr);
+			res_val_ptr += *res_size_ptr;
+			res_size_ptr++;
+		}
+
+	}
+
+	#ifdef __DEBUG__
+	if(error == ERR_NONE)
+	{
+		DEBUG_PRINT("notice: *** DONE ***\n\n");
+	}
+	else
+	{
+		DEBUG_PRINT("notice: something went wrong on the server side");
+		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+	}
+	#endif
 
 	if(s >= 0)
 	{
@@ -418,15 +412,14 @@ int store_halt()
 		else
 		{
 			error = store_act(s, &req_inf, NULL, &res_inf, NULL);
+
+			// does the size make sense?
+			if(error == ERR_NONE && res_inf.size > 0)
+			{
+				error = ERR_SIZE;
+			}
 		}
 	}
-	// does the size make sense?
-	if(error == ERR_NONE && res_inf.size > 0)
-	{
-		// something must have happened
-		error = ERR_SIZE;
-	}
-	// else { *** done *** }
 
 	#ifdef __DEBUG__
 	if(error == ERR_NONE)
