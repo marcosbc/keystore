@@ -55,6 +55,7 @@
 #define ERR_LISTEN 43
 #define ERR_ACCEPT 44
 #define ERR_CONNECT 44
+#define ERR_SIZE 45 // actually it is a flag
 
 #define STORE_NUM_MODES 3
 #define STORE_MODE_SET_ID 0
