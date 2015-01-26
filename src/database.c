@@ -75,7 +75,7 @@ store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
 // locate an entry in the database, IT DOES NOT WORK OK
 store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
-	DEBUG_PRINT("locating entry\n");
+	DEBUG_PRINT("notice: locating entry\n");
 	store_entry *iterator = db->ent;
 
 	// find our collection

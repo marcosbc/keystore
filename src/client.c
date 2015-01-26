@@ -58,7 +58,7 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	}
 	else
 	{
-		DEBUG_PRINT("get first set of values from shm\n");
+		DEBUG_PRINT("getting values from shared memory\n");
 
 		// set our mode and other variables
 		max_db_len = store->max_db_len;
@@ -68,12 +68,6 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
-
-		DEBUG_PRINT("got server config pid=%d, socklen=%d \
-sockpath=%s keylen=%d vallen=%d dblen=%d\n",
-					 (int) store->pid,
-					 store->max_sock_len, store->sock_path, store->max_key_len,
-					 store->max_val_len, store->max_db_len);
 
 		// set request info
 		req_inf.mode = store->modes[STORE_MODE_SET_ID];
@@ -104,7 +98,7 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 	}
 	else
 	{
-		DEBUG_PRINT("notice: preparing for setting");
+		DEBUG_PRINT("notice: preparing for setting\n");
 
 		// init request data
 		req->val_size = strlen(value) + 1;
@@ -138,24 +132,24 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		// read the result
 		DEBUG_PRINT("notice: getting response\n");
 		read(s, &res_inf, sizeof(struct response_info));
-		DEBUG_PRINT("read res_info err=%d sz=%zu\n", res_inf.error, res_inf.size);
 
-		if(res_inf.size <= 0)
-		{
-			DEBUG_PRINT("notice: malformed response\n");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-			// error = ...;
-		}
 		if(res_inf.error != ERR_NONE)
 		{
-			DEBUG_PRINT("notice: something went wrong on the server side");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
 			error = res_inf.error;
 		}
-		else
+		// else { *** DONE *** }
+
+		#ifdef __DEBUG__
+		if(error == ERR_NONE)
 		{
 			DEBUG_PRINT("notice: *** DONE ***\n\n");
 		}
+		else
+		{
+			DEBUG_PRINT("notice: something went wrong on the server side");
+			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+		}
+		#endif
 	}
 
 	if(s >= 0)
@@ -262,12 +256,11 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	}
 	else
 	{
-		DEBUG_PRINT("notice: preparing for getting");
+		DEBUG_PRINT("notice: preparing for getting\n");
 
 		// init request data
 		req->val_size = 1; // strlen("")
 		req->num_dbs = num_dbs;
-		DEBUG_PRINT("val_len and num_dbs\n");
 
 		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
 		key_ptr = (char *) (req + 1);
@@ -277,7 +270,6 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		// correct key
 		strncpy(key_ptr, key, max_key_len - 1);
 		key_ptr[max_key_len - 1] = '\0';
-		DEBUG_PRINT("key------\n");
 
 		// set our value as an empty string
 		*val_ptr = '\0';
@@ -288,14 +280,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 			strncpy(dbs_ptr + i * max_db_len, dbs[i],
 			        max_db_len - 1);
 			*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
-			DEBUG_PRINT("db %d\n", i);
 		}
-
-		DEBUG_PRINT("%p: key %p (+%d), val %p (+%d) and dbs %p (+%d)\n",
-					req, key_ptr, (int) sizeof(req), val_ptr, 0,
-					dbs_ptr, max_key_len);
-		DEBUG_PRINT("values: key %s, val \"%s\" and dbs[0] %s\n",
-					key_ptr, val_ptr, dbs_ptr);
 
 		// send the data
 		DEBUG_PRINT("notice: sending request\n");
@@ -305,51 +290,51 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		// read the result
 		DEBUG_PRINT("notice: getting response\n");
 		read(s, &res_inf, sizeof(struct response_info));
-		DEBUG_PRINT("read res_info err=%d sz=%zu\n", res_inf.error, res_inf.size);
 
 		if(res_inf.size <= 0)
 		{
-			DEBUG_PRINT("notice: malformed response\n");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
 			// error = ...;
 		}
 		if(res_inf.error != ERR_NONE)
 		{
-			DEBUG_PRINT("notice: something went wrong on the server side");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
 			error = res_inf.error;
 		}
 		else if(NULL == (res = (struct response *) calloc(1, res_inf.size)))
 		{
 			print_perror("calloc");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
 			error = ERR_ALLOC;
 		}
 		else
 		{
 			read(s, res, res_inf.size);
-			DEBUG_PRINT("read res%p\n", res);
 
 			// calculate pointers
 			res_size_ptr = (int *) (res + 1);
 			res_val_ptr = (char *) (res_size_ptr + res->num);
 
-			DEBUG_PRINT("len=%p val=%p\n", res_size_ptr, val_ptr);
-			DEBUG_PRINT("len=%d\n", *res_size_ptr);
-			DEBUG_PRINT("val=%p\n", val_ptr);
-
 			// now we checked everything is ok, print result
 			for(i = 0; i < num_dbs; i++)
 			{
+				// print result
 				printf("%s: %s=%s\n", dbs_ptr + i * max_db_len,
 				                      key,
-									  res_val_ptr); // -----
+									  res_val_ptr);
 				res_val_ptr += *res_size_ptr;
 				res_size_ptr++;
 			}
+		}
 
+		#ifdef __DEBUG__
+		if(error == ERR_NONE)
+		{
 			DEBUG_PRINT("notice: *** DONE ***\n\n");
 		}
+		else
+		{
+			DEBUG_PRINT("notice: something went wrong on the server side");
+			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+		}
+		#endif
 	}
 
 	if(s >= 0)
@@ -443,20 +428,25 @@ int store_halt()
 
 		if(res_inf.size <= 0)
 		{
-			DEBUG_PRINT("notice: malformed response");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
 			// error = ...;
 		}
 		else if(res_inf.error != ERR_NONE)
 		{
-			DEBUG_PRINT("server side error occured");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
 			error = res_inf.error;
 		}
-		else
+		// else { *** done *** }
+
+		#ifdef __DEBUG__
+		if(error == ERR_NONE)
 		{
 			DEBUG_PRINT("notice: *** DONE ***\n\n");
 		}
+		else
+		{
+			DEBUG_PRINT("notice: something went wrong on the server side");
+			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+		}
+		#endif
 	}
 
 	if(s >= 0)

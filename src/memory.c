@@ -18,7 +18,7 @@ int memory_init()
 
 void *memory_set(void *info)
 {
-	DEBUG_PRINT("in memory_set\n");
+	DEBUG_PRINT("notice: memory_set\n");
 	int val_len = 0;
 	store_entry *entry = NULL;
 	store_db *db = NULL;
@@ -30,55 +30,41 @@ void *memory_set(void *info)
 	store_db **dbs = ((struct entry_inf *) info)->dbs;
 	int *error = &(((struct entry_inf *) info)->error);
 
-	DEBUG_PRINT("got values: key=%s value=%s db_name=%s dbs=%p error=%d\n",
-	            key, value, db_name, *dbs, *error);
-
 	// we shouldn't write while reading/writing
 	write_lock();
 	
-	DEBUG_PRINT("finding db\n");
 	// locate our db and find our entry
 	db = locate_db(db_name, *dbs);
 
-	DEBUG_PRINT("db found?\n");
 	// create our db if it doesn't exist
 	if(db == NULL)
 	{
-		DEBUG_PRINT("*** creating db with name \"%s\", dbs=%p\n",
+		DEBUG_PRINT("notice: db notfound, creating db with name \"%s\", dbs=%p\n",
 		            db_name, dbs);
 		db = create_db(db_name, dbs);
-		DEBUG_PRINT("created db %p\n", db);
 	}
 
 	// error allocating data while creating the db?
 	if(db == NULL)
 	{
-		DEBUG_PRINT("error allocating for db \n");
+		perror("create_db");
 		*error = ERR_ALLOC;
 	}
 	else
 	{
-		DEBUG_PRINT("finding entry\n");
-
 		entry = locate_entry(key, db);
-		DEBUG_PRINT("entry found?\n");
 
 		// did we find an entry?
 		if(entry != NULL)
 		{
 			// yes, so free the previous one
-			DEBUG_PRINT("yes, free val %p\n", entry->val);
 			free(entry->val);
 			entry->val = NULL;
 		}
 		// if we didn't, create a new one
 		else
 		{
-			DEBUG_PRINT("no, creat\n");
-
 			entry = create_entry(key, &db);
-			DEBUG_PRINT("created\n");
-
 
 			if(entry == NULL)
 			{
@@ -97,16 +83,14 @@ void *memory_set(void *info)
 			{
 				val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
 			}
-			DEBUG_PRINT("reserving val %s, len %d\n", value, val_len);
+			// reserve space for our value
 			entry->val = (char *) calloc(val_len, sizeof(char));
 				
 			if(entry->val == NULL)
 			{
 				*error = ERR_ALLOC;
 			}
-			DEBUG_PRINT("have entry now, adding value (MAX_LEN=%d)\n",
-			            MAX_VAL_SIZE);
-			
+
 			strncpy(entry->val, value, val_len);
 			entry->val[val_len - 1] = '\0';
 
@@ -119,16 +103,6 @@ void *memory_set(void *info)
 
 			#ifdef __DEBUG__
 			print_store_tree(dbs);
-
-			if(entry != NULL)
-			{
-				DEBUG_PRINT("\n\nhas entry: %p with %s=%s\n", entry,
-				            entry->key, entry->val);
-			}
-			else
-			{
-				DEBUG_PRINT("\n\nwe *DONT* have an entry, NULL: %p\n", entry);
-			}
 			#endif
 		}
 	}
@@ -136,13 +110,13 @@ void *memory_set(void *info)
 	// done!
 	write_unlock();
 	
-	DEBUG_PRINT("returning thread error %d\n", *error);
+	DEBUG_PRINT("notice: memory_set returning thread error %d\n", *error);
 	pthread_exit(NULL);
 }
 
 void *memory_get(void *info)
 {
-	DEBUG_PRINT("in memory_get\n");
+	DEBUG_PRINT("notice: memory_get\n");
 	store_entry *ent = NULL;
 
 	// extract information from our info variable
@@ -156,7 +130,7 @@ void *memory_get(void *info)
 	// we have a limit of max readers at once
 	read_lock();
 
-	DEBUG_PRINT("locating db %s in dbs %p\n", db_name, dbs);
+	DEBUG_PRINT("notice: locating db %s in dbs %p\n", db_name, dbs);
 
 	// locate our db and find our entry
 	if(NULL == (db = locate_db(db_name, dbs)))
@@ -174,8 +148,7 @@ void *memory_get(void *info)
 	}
 	else
 	{
-		DEBUG_PRINT("notice: [child, memory] getting from db \"%s\" key \
-\"%s\"\n",
+		DEBUG_PRINT("notice: getting from db \"%s\" key \"%s\"\n",
 		            db->name,
 		    		((store_entry *) ent)->key);
 
@@ -183,8 +156,7 @@ void *memory_get(void *info)
 		// write semaphore not needed because the entry_info is not shared
 		strcpy(value, ent->val);
 
-		DEBUG_PRINT("notice: [child, memory] got value \"%s\" for key \
-\"%s\" in db \"%s\"\n",
+		DEBUG_PRINT("notice: got value \"%s\" for key \"%s\" in db \"%s\"\n",
 		            value, key, db_name);
 		
 		// save the entry and value to our info variable (as output)
@@ -196,12 +168,12 @@ void *memory_get(void *info)
 
 		if(ent != NULL)
 		{
-			DEBUG_PRINT("\n\nhas entry: %p with %s=%s\n", ent,
+			DEBUG_PRINT("\nhas entry: %p with %s=%s\n\n", ent,
 			            ent->key, ent->val);
 		}
 		else
 		{
-			DEBUG_PRINT("\n\nwe *DONT* have an entry, NULL: %p\n", ent);
+			DEBUG_PRINT("\nwe *DONT* have an entry, NULL: %p\n\n", ent);
 		}
 		#endif
 	}
@@ -209,7 +181,7 @@ void *memory_get(void *info)
 	// reading done!
 	read_unlock();
 	
-	DEBUG_PRINT("returning thread error %d\n", *error);
+	DEBUG_PRINT("notice: memory_get returning thread error %d\n", *error);
 	pthread_exit(NULL);
 }
 
@@ -225,6 +197,8 @@ int memory_clear(store_db **dbs)
 
 int free_tree(store_db **dbs)
 {
+	DEBUG_PRINT("notice: freeing the tree of databases and entries\n");
+
 	int success = 0;
 	store_db *prev_db = NULL;
 	store_db *iterator = NULL;
@@ -237,25 +211,25 @@ int free_tree(store_db **dbs)
 	// see what our dbs contains now
 	while(iterator != NULL)
 	{
-		DEBUG_PRINT("current db: %p, next: %p\n", iterator, iterator->next);
+		DEBUG_PRINT("notice: current db %p next %p\n", iterator, iterator->next);
 		entry = iterator->ent;
 		while(entry != NULL)
 		{
 			// free it's value
-			DEBUG_PRINT("free val %p\n", entry->val);
+			DEBUG_PRINT("notice: free val %p\n", entry->val);
 			free(entry->val);
 			prev = entry;
 			entry = entry->next;
 		
 			// go to the next one
-			DEBUG_PRINT("free entry %p\n", prev);
+			DEBUG_PRINT("notice: free entry %p\n", prev);
 			free(prev);
 		}
 
-		DEBUG_PRINT("current db: %p, next: %p\n", iterator, iterator->next);
+		DEBUG_PRINT("notice: current db %p next %p\n", iterator, iterator->next);
 		prev_db = iterator;
 		iterator = iterator->next;
-		DEBUG_PRINT("free db %p, next is %p\n", prev_db, iterator);
+		DEBUG_PRINT("notice: free db %p, next is %p\n", prev_db, iterator);
 		free(prev_db);
 		prev_db = NULL;
 	}
