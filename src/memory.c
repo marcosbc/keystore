@@ -39,7 +39,7 @@ void *memory_set(void *info)
 	// create our db if it doesn't exist
 	if(db == NULL)
 	{
-		DEBUG_PRINT("notice: db %s not found, creating...\n", db_name, dbs);
+		DEBUG_PRINT("notice: db \"%s\" %p not found, creating...\n", db_name, dbs);
 		db = create_db(db_name, dbs);
 	}
 
