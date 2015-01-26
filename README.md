@@ -24,17 +24,6 @@ We have two different modes of usage:
 We could have used FIFO pipes but we opted by this, since it is something more modern and client-server specific.
 We could also have used message queues instead, which can be seen as ideal but we want our client and server to be connected, and to know when one is not alive. Using sockets also allows us to send non-static data, e.g. strings with a dynamic length.
 
-### FUTURE IMPROVEMENTS
-
-- Create a more complete and console-like client.
-- Allow setting more than one value at once.
-- Improve the data-sending between server and client (by reducing the number of necessary `read()` and `write()` operations). Try to remove the need for `ack` messages.
-- Allow the server to treat multiple requests at once (`fork()` for each new request).
-- Add support for collections: `collection.key`, `collection.subcollection.key`, etcetera.
-- Use configuration files to store settings for the server.
-- Allow to store data permanently (so that it persists even if you restart the server).
-- Add support for horizontal scaling.
-
 ### INSTALLATION STEPS
 
 First, clone this GIT repository in your local computer:
