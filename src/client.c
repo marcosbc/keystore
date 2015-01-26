@@ -82,61 +82,63 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	}
 
 	// initialize our socket
-	if(error == ERR_NONE && -1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(error == ERR_NONE)
 	{
-		error = ERR_SOCKETCREATE;
-	}
-	// connect to socket
-	else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
-	{
-		print_perror("connect");
-		error = ERR_CONNECT;
-	}
-	else if(NULL == (req = (struct request *) malloc(req_inf.size)))
-	{
-		print_perror("malloc");
-		error = ERR_ALLOC;
-	}
-	else
-	{
-		DEBUG_PRINT("notice: preparing for setting\n");
-
-		// init request data
-		req->val_size = strlen(value) + 1;
-		req->num_dbs = num_dbs;
-
-		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
-		key_ptr = (char *) (req + 1);
-		val_ptr = (char *) (key_ptr + max_key_len);
-		dbs_ptr = (char *) (val_ptr + req->val_size);
-
-		// correct key
-		strncpy(key_ptr, key, max_key_len - 1);
-		key_ptr[max_key_len - 1] = '\0';
-
-		// copy the value (we already have reserved for the needed length)
-		strcpy(val_ptr, value);
-
-		// copy dbs and correct
-		for(i = 0; i < num_dbs; i++)
+		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			strncpy(dbs_ptr + i * max_db_len, dbs[i],
-			        max_db_len - 1);
-			*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
+			error = ERR_SOCKETCREATE;
 		}
-
-		// send the data
-		DEBUG_PRINT("notice: sending request\n");
-		write(s, &req_inf, sizeof(struct request_info));
-		write(s, req, req_inf.size);
-
-		// read the result
-		DEBUG_PRINT("notice: getting response\n");
-		read(s, &res_inf, sizeof(struct response_info));
-
-		if(res_inf.error != ERR_NONE)
+		// connect to socket
+		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
 		{
-			error = res_inf.error;
+			print_perror("connect");
+			error = ERR_CONNECT;
+		}
+		else if(NULL == (req = (struct request *) malloc(req_inf.size)))
+		{
+			print_perror("malloc");
+			error = ERR_ALLOC;
+		}
+		else
+		{
+			DEBUG_PRINT("notice: preparing for setting\n");
+
+			// init request data
+			req->val_size = strlen(value) + 1;
+			req->num_dbs = num_dbs;
+
+			// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
+			key_ptr = (char *) (req + 1);
+			val_ptr = (char *) (key_ptr + max_key_len);
+			dbs_ptr = (char *) (val_ptr + req->val_size);
+
+			// correct key
+			strncpy(key_ptr, key, max_key_len - 1);
+			key_ptr[max_key_len - 1] = '\0';
+
+			// copy the value (we already have reserved for the needed length)
+			strcpy(val_ptr, value);
+
+			// copy dbs and correct
+			for(i = 0; i < num_dbs; i++)
+			{
+				strncpy(dbs_ptr + i * max_db_len, dbs[i],
+				        max_db_len - 1);
+				*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
+			}
+
+			// communicate with the server
+			error = store_act(s, &req_inf, &req, &res_inf, NULL);
+		}
+	}
+
+	// if the response-info was received correctly
+	if(error == ERR_NONE)
+	{
+		DEBUG_PRINT("temp-notice: everything ok\n");
+		if(res_inf.size > 0)
+		{
+			error = ERR_SIZE;
 		}
 		// else { *** DONE *** }
 
@@ -240,77 +242,68 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		read_unlock();
 	}
 
-	// initialize our socket
-	if(error == ERR_NONE && -1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(error != ERR_NONE)
 	{
-		DEBUG_PRINT("error at socket creation\n");
-		error = ERR_SOCKETCREATE;
-	}
-	// connect to socket
-	else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
-	{
-		print_perror("connect");
-		error = ERR_CONNECT;
-	}
-	else if(NULL == (req = (struct request *) malloc(req_inf.size)))
-	{
-		print_perror("malloc");
-		error = ERR_ALLOC;
-	}
-	else
-	{
-		DEBUG_PRINT("notice: preparing for getting\n");
-
-		// init request data
-		req->val_size = 1; // strlen("") + 1
-		req->num_dbs = num_dbs;
-
-		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
-		key_ptr = (char *) (req + 1);
-		val_ptr = (char *) (key_ptr + max_key_len);
-		dbs_ptr = (char *) (val_ptr + req->val_size);
-
-		// correct key
-		strncpy(key_ptr, key, max_key_len - 1);
-		key_ptr[max_key_len - 1] = '\0';
-
-		// set our value as an empty string
-		*val_ptr = '\0';
-
-		// copy dbs and correct
-		for(i = 0; i < num_dbs; i++)
+		// initialize our socket
+		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			strncpy(dbs_ptr + i * max_db_len, dbs[i],
-			        max_db_len - 1);
-			*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
+			DEBUG_PRINT("error at socket creation\n");
+			error = ERR_SOCKETCREATE;
 		}
-
-		// send the data
-		DEBUG_PRINT("notice: sending request\n");
-		write(s, &req_inf, sizeof(struct request_info));
-		write(s, req, req_inf.size);
-
-		// read the result
-		DEBUG_PRINT("notice: getting response\n");
-		read(s, &res_inf, sizeof(struct response_info));
-
-		if(res_inf.size <= 0)
+		// connect to socket
+		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
 		{
-			// error = ...;
+			print_perror("connect");
+			error = ERR_CONNECT;
 		}
-		if(res_inf.error != ERR_NONE)
-		{
-			error = res_inf.error;
-		}
-		else if(NULL == (res = (struct response *) malloc(res_inf.size)))
+		else if(NULL == (req = (struct request *) malloc(req_inf.size)))
 		{
 			print_perror("malloc");
 			error = ERR_ALLOC;
 		}
 		else
 		{
-			read(s, res, res_inf.size);
+			DEBUG_PRINT("notice: preparing for getting\n");
 
+			// init request data
+			req->val_size = 1; // strlen("") + 1
+			req->num_dbs = num_dbs;
+
+			// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
+			key_ptr = (char *) (req + 1);
+			val_ptr = (char *) (key_ptr + max_key_len);
+			dbs_ptr = (char *) (val_ptr + req->val_size);
+
+			// correct key
+			strncpy(key_ptr, key, max_key_len - 1);
+			key_ptr[max_key_len - 1] = '\0';
+
+			// set our value as an empty string
+			*val_ptr = '\0';
+
+			// copy dbs and correct
+			for(i = 0; i < num_dbs; i++)
+			{
+				strncpy(dbs_ptr + i * max_db_len, dbs[i],
+				        max_db_len - 1);
+				*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
+			}
+
+			// communicate with the server
+			error = store_act(s, &req_inf, &req, &res_inf, &res);
+		}
+	}
+
+	// did we receive the response in store_act without error?
+	if(error == ERR_NONE)
+	{
+		// can never be less than zero, but just in case we change types
+		if(res_inf.size <= 0)
+		{
+			error = ERR_SIZE;
+		}
+		else
+		{
 			// calculate pointers
 			res_size_ptr = (int *) (res + 1);
 			res_val_ptr = (char *) (res_size_ptr + res->num);
@@ -321,7 +314,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 				// print result
 				printf("%s: %s=%s\n", dbs_ptr + i * max_db_len,
 				                      key,
-									  res_val_ptr);
+				                      res_val_ptr);
 				res_val_ptr += *res_size_ptr;
 				res_size_ptr++;
 			}
@@ -382,8 +375,7 @@ int store_halt()
 		error = ERR_MEM_SEMOPEN;
 	}
 	// get our server's public config information
-	else if(error == ERR_NONE &&
-	        -1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
 	{
 		error = ERR_STORE_SHMLOAD;
 	}
@@ -411,47 +403,42 @@ int store_halt()
 	DEBUG_PRINT("notice: database preparing to shut down\n");
 
 	// initialize our socket
-	if(error == ERR_NONE && -1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(error == ERR_NONE)
 	{
-		error = ERR_SOCKETCREATE;
-	}
-	// connect to socket
-	else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
-	{
-		print_perror("connect");
-		error = ERR_CONNECT;
-	}
-	else
-	{
-		// send halt character to daemon (for shutdown)
-		write(s, &req_inf, sizeof(struct request_info));
-
-		DEBUG_PRINT("notice: database shutting down\n");
-
-		read(s, &res_inf, sizeof(struct response_info));
-
-		if(res_inf.size <= 0)
+		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			// error = ...;
+			error = ERR_SOCKETCREATE;
 		}
-		else if(res_inf.error != ERR_NONE)
+		// connect to socket
+		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
 		{
-			error = res_inf.error;
-		}
-		// else { *** done *** }
-
-		#ifdef __DEBUG__
-		if(error == ERR_NONE)
-		{
-			DEBUG_PRINT("notice: *** DONE ***\n\n");
+			print_perror("connect");
+			error = ERR_CONNECT;
 		}
 		else
 		{
-			DEBUG_PRINT("notice: something went wrong on the server side");
-			DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+			error = store_act(s, &req_inf, NULL, &res_inf, NULL);
 		}
-		#endif
 	}
+	// does the size make sense?
+	if(error == ERR_NONE && res_inf.size > 0)
+	{
+		// something must have happened
+		error = ERR_SIZE;
+	}
+	// else { *** done *** }
+
+	#ifdef __DEBUG__
+	if(error == ERR_NONE)
+	{
+		DEBUG_PRINT("notice: *** DONE ***\n\n");
+	}
+	else
+	{
+		DEBUG_PRINT("notice: something went wrong on the server side");
+		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+	}
+	#endif
 
 	if(s >= 0)
 	{
@@ -462,9 +449,44 @@ int store_halt()
 	return error;
 }
 
-// common actions in store_set and store_get
-/* int send_data(int s, struct request_info *req_inf, struct request **req,
+// save request and send data
+int store_act(int s, struct request_info *req_inf, struct request **req,
               struct response_info *res_inf, struct response **res)
 {
+	int error = ERR_NONE;
 
-} */
+	// send the data
+	DEBUG_PRINT("notice: sending request\n");
+	write(s, req_inf, sizeof(struct request_info));
+
+	// only send data if there is something to send
+	if(req != NULL && req_inf->size > 0)
+	{
+		write(s, *req, req_inf->size);
+	}
+
+	// read the result
+	DEBUG_PRINT("notice: getting response\n");
+	read(s, res_inf, sizeof(struct response_info));
+
+	if(res_inf->error != ERR_NONE)
+	{
+		error = res_inf->error;
+		// we should add a checksum to check if data is ok
+	}
+	// only continue if we have something to receive
+	else if(res_inf->size > 0)
+	{
+		if(NULL == (*res = (struct response *) malloc(res_inf->size)))
+		{
+			print_perror("malloc");
+			error = ERR_ALLOC;
+		}
+		else
+		{
+			read(s, *res, res_inf->size);
+		}
+	}
+
+	return error;
+}
