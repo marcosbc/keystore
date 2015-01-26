@@ -346,7 +346,7 @@ int store_server_act(int s, store_db **dbs)
 								if(result != NULL && result[i] != NULL)
 								{
 									strcpy(res_val_ptr, result[i]->val);
-									*res_size_ptr = strlen(res_val_ptr);
+									*res_size_ptr += strlen(res_val_ptr);
 								}
 
 								// jump to the next element
