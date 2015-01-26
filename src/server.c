@@ -485,52 +485,55 @@ int store_server_init()
 	}
 
 	// if we were able to store the info successfully, proceed
-	if(error == ERR_NONE && NULL != fopen(sock_path, "r"))
+	if(error == ERR_NONE)
 	{
-		print_error("socket connection already exists");
-		error = ERR_SOCKETEXIST;
-	}
-	// create our socket
-	else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
-	{
-		error = ERR_SOCKETCREATE;
-	}
-	// bind socket to file
-	else if (bind(s, (struct sockaddr *) &addr, len) < 0)
-	{
-		print_perror("bind");
-		error = ERR_BIND;
-	}
-	else if(listen(s, 5) < 0)
-	{
-		print_perror("listen");
-		error = ERR_LISTEN;
-	}
-	else
-	{
-		// *** import our file system data ***
-		// dbs = store_import();
-
-		// daemon
-		printf("database running...\n");
-		while(! stop_server)
+		if(NULL != fopen(sock_path, "r"))
 		{
-			DEBUG_PRINT("\n\nnotice: iteration with db %p\n", dbs);
-			error = store_server_act(s, &dbs);
+			print_error("socket connection already exists");
+			error = ERR_SOCKETEXIST;
+		}
+		// create our socket
+		else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+		{
+			error = ERR_SOCKETCREATE;
+		}
+		// bind socket to file
+		else if (bind(s, (struct sockaddr *) &addr, len) < 0)
+		{
+			print_perror("bind");
+			error = ERR_BIND;
+		}
+		else if(listen(s, 5) < 0)
+		{
+			print_perror("listen");
+			error = ERR_LISTEN;
+		}
+		else
+		{
+			// *** import our file system data ***
+			// dbs = store_import();
+
+			// daemon
+			printf("database running...\n");
+			while(! stop_server)
+			{
+				DEBUG_PRINT("\n\nnotice: iteration with db %p\n", dbs);
+				error = store_server_act(s, &dbs);
+			}
+
+			printf("stopping server...\n");
 		}
 
-		printf("stopping server...\n");
-	}
+		DEBUG_PRINT("notice: socket 's' has value '%d'\n", s);
+		// if the socket was created
+		if(s >= 0)
+		{
+			// now that we've finished, close our communication channel
+			close(s);
 
-	DEBUG_PRINT("notice: socket 's' has value '%d'\n", s);
-	// if the socket was created
-	if(s >= 0)
-	{
-		// now that we've finished, close our communication channel
-		close(s);
-
-		// also remove our socket file
-		unlink(sock_path);
+			// also remove our socket file
+			unlink(sock_path);
+		}
 	}
 
 	// unmap our shared memory
