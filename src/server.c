@@ -14,7 +14,7 @@
 #include "database.h"
 #include "sems.h"
 
-int stop_server = 0; // for signals to work
+volatile int stop_server = 0; // for signals to work
 
 void store_stop()
 {
