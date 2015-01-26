@@ -105,3 +105,8 @@ To terminate shared memory:
 ```
     $ ipcrm -m SHARED_MEMORY_ID
 ```
+
+### MORE INFO
+
+You may find interesting links in our [Github Wiki](https://github.com/marcosbc/keystore/wiki).
+
