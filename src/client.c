@@ -24,6 +24,7 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	// variables for communication via TCP
 	int s = -1;
 	struct sockaddr_un addr;
+	size_t addr_size = 0;
 
 	// shared memory and common settings
 	int shmid = -1;
@@ -68,6 +69,7 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
+		addr_size = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 		// set request info
 		req_inf.mode = store->modes[STORE_MODE_SET_ID];
@@ -85,15 +87,14 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		error = ERR_SOCKETCREATE;
 	}
 	// connect to socket
-	else if(connect(s, (struct sockaddr *) &addr,
-	                sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1)) == -1)
+	else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
 	{
 		print_perror("connect");
 		error = ERR_CONNECT;
 	}
 	else if(NULL == (req = (struct request *) malloc(req_inf.size)))
 	{
-		print_perror("calloc");
+		print_perror("malloc");
 		error = ERR_ALLOC;
 	}
 	else
@@ -187,6 +188,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	// variables for communication via TCP
 	int s = -1; // client socket
 	struct sockaddr_un addr;
+	size_t addr_size = 0;
 
 	// shared memory, common settings variables
 	store_info *store = NULL;
@@ -227,10 +229,12 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
+		addr_size = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 		// set request info
 		req_inf.mode = store->modes[STORE_MODE_GET_ID];
-		req_inf.size = (max_key_len + 1 + num_dbs * max_db_len) // 1 = strlen("")
+		// the "1" comes from the size of the value, which is empty ("")
+		req_inf.size = (max_key_len + 1 + num_dbs * max_db_len)
 		               * sizeof(char) + sizeof(struct request);
 
 		read_unlock();
@@ -243,15 +247,14 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		error = ERR_SOCKETCREATE;
 	}
 	// connect to socket
-	else if(connect(s, (struct sockaddr *) &addr,
-	                sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1)) == -1)
+	else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
 	{
 		print_perror("connect");
 		error = ERR_CONNECT;
 	}
 	else if(NULL == (req = (struct request *) malloc(req_inf.size)))
 	{
-		print_perror("calloc");
+		print_perror("malloc");
 		error = ERR_ALLOC;
 	}
 	else
@@ -259,7 +262,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		DEBUG_PRINT("notice: preparing for getting\n");
 
 		// init request data
-		req->val_size = 1; // strlen("")
+		req->val_size = 1; // strlen("") + 1
 		req->num_dbs = num_dbs;
 
 		// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
@@ -299,9 +302,9 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		{
 			error = res_inf.error;
 		}
-		else if(NULL == (res = (struct response *) calloc(1, res_inf.size)))
+		else if(NULL == (res = (struct response *) malloc(res_inf.size)))
 		{
-			print_perror("calloc");
+			print_perror("malloc");
 			error = ERR_ALLOC;
 		}
 		else
@@ -363,6 +366,7 @@ int store_halt()
 	// variables for communication via TCP
 	int s = -1; // client socket
 	struct sockaddr_un addr;
+	size_t addr_size = 0;
 
 	// shared memory and common settings (in this case, only socket path)
 	int shmid = -1;
@@ -395,6 +399,7 @@ int store_halt()
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
+		addr_size = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
 		// set request info
 		req_inf.mode = store->modes[STORE_MODE_STOP_ID];
@@ -411,8 +416,7 @@ int store_halt()
 		error = ERR_SOCKETCREATE;
 	}
 	// connect to socket
-	else if(connect(s, (struct sockaddr *) &addr,
-	                sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1)) == -1)
+	else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
 	{
 		print_perror("connect");
 		error = ERR_CONNECT;

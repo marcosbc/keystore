@@ -2,7 +2,7 @@
 #define __KEYSTORE__
 
 #define ERR_USE 1
-#define ERR_USE_MSG "use: %s [set KEY VALUE|get KEY] DB1[ DB2[ ...]]\n"
+#define ERR_USE_MSG "use: %s [[[set KEY VALUE|get KEY] DB1[ DB2[...]]]|stop]\n"
 
 #define MODE                1
 #define MODE_SET            "set"

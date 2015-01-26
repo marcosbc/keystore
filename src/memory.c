@@ -39,8 +39,7 @@ void *memory_set(void *info)
 	// create our db if it doesn't exist
 	if(db == NULL)
 	{
-		DEBUG_PRINT("notice: db notfound, creating db with name \"%s\", dbs=%p\n",
-		            db_name, dbs);
+		DEBUG_PRINT("notice: db %s not found, creating...\n", db_name, dbs);
 		db = create_db(db_name, dbs);
 	}
 
@@ -94,8 +93,8 @@ void *memory_set(void *info)
 			strncpy(entry->val, value, val_len);
 			entry->val[val_len - 1] = '\0';
 
-			DEBUG_PRINT("notice: [child, memory] setting in db \"%s\" key \
-\"%s\", value \"%s\" and val_len \"%d\" is DONE\n",
+			DEBUG_PRINT("notice: setting in db \"%s\" key \"%s\", \
+value \"%s\" and val_len \"%d\" is DONE\n",
 			            db_name, entry->key, entry->val, val_len);
 
 			// save the entry to our info variable (as output)
@@ -211,7 +210,6 @@ int free_tree(store_db **dbs)
 	// see what our dbs contains now
 	while(iterator != NULL)
 	{
-		DEBUG_PRINT("notice: current db %p next %p\n", iterator, iterator->next);
 		entry = iterator->ent;
 		while(entry != NULL)
 		{
@@ -226,10 +224,13 @@ int free_tree(store_db **dbs)
 			free(prev);
 		}
 
-		DEBUG_PRINT("notice: current db %p next %p\n", iterator, iterator->next);
+		// jump to next element
 		prev_db = iterator;
 		iterator = iterator->next;
-		DEBUG_PRINT("notice: free db %p, next is %p\n", prev_db, iterator);
+
+		DEBUG_PRINT("notice: free db: %p, next: %p\n", prev_db, iterator);
+
+		// free previous element
 		free(prev_db);
 		prev_db = NULL;
 	}

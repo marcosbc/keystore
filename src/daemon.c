@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
 	if(argc == NUM_ARGS)
 	{
 		error_type = store_server_init();
-		DEBUG_PRINT("notice: store_init returned error_type %d\n", error_type);
+		DEBUG_PRINT("notice: store_init returned error %d\n", error_type);
 	}
 	else
 	{

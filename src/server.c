@@ -39,9 +39,9 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 	            key, val, num_dbs);
 
 	if(NULL == (*entries = (store_entry **) calloc(num_dbs,
-	                                               sizeof(store_entry *)))
+	                                                    sizeof(store_entry *)))
 	|| NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
-	                                                  sizeof(struct entry_inf)))
+	                                                 sizeof(struct entry_inf)))
 	|| NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
 	{
 		err = ERR_ALLOC;
@@ -140,9 +140,9 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 		DEBUG_PRINT("dbs is NULL\n");
 	}
 	else if(NULL == (*entries = (store_entry **) calloc(num_dbs,
-	                                                   sizeof(store_entry *)))
+	                                                    sizeof(store_entry *)))
 	     || NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
-	                                                sizeof(struct entry_inf)))
+	                                                 sizeof(struct entry_inf)))
 	     || NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
 	{
 		DEBUG_PRINT("err at alloc\n");
@@ -258,7 +258,6 @@ int store_server_act(int s, store_db **dbs)
 
 	DEBUG_PRINT("notice: waiting for a connection...\n");
 
-	// accept connection (if it fails, it is because server was closed: no error)
 	if(-1 != (client_s = accept(s, (struct sockaddr *) &client, &client_len)))
 	{
 		printf("connection incoming\n");
@@ -299,8 +298,9 @@ int store_server_act(int s, store_db **dbs)
 				switch(req_inf.mode)
 				{
 					case STORE_MODE_SET:
-						/* error = */ store_write(key_ptr, val_ptr, req->num_dbs,
-						                          dbs_ptr, dbs, &result);
+						/* error = */ store_write(key_ptr, val_ptr,
+						                          req->num_dbs, dbs_ptr,
+						                          dbs, &result);
 						break;
 					case STORE_MODE_GET:
 						/* error = */ store_read(key_ptr, req->num_dbs,
@@ -393,6 +393,7 @@ int store_server_act(int s, store_db **dbs)
 			           + (end_tm.millitm - start_tm.millitm));
 	}
 
+	free(result);
 	free(res);
 	free(req);
 
