@@ -20,6 +20,7 @@ void *memory_set(void *info)
 {
 	DEBUG_PRINT("notice: memory_set\n");
 	int val_len = 0;
+	int val_differs = 1; // if the values are the same
 	store_entry *entry = NULL;
 	store_db *db = NULL;
 
@@ -53,12 +54,30 @@ void *memory_set(void *info)
 	{
 		entry = locate_entry(key, db);
 
+		// if we have set a value limit, apply it
+		if(MAX_VAL_SIZE <= 0)
+		{
+			val_len = strlen(value) + 1;
+		}
+		else
+		{
+			val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
+		}
+
 		// did we find an entry?
 		if(entry != NULL)
 		{
-			// yes, so free the previous one
-			free(entry->val);
-			entry->val = NULL;
+			if(0 == strncmp(value, entry->val, val_len))
+			{
+				DEBUG_PRINT("notice: %s: values are equal\n", db_name);
+				val_differs = 0;
+			}
+			else
+			{
+				// if the value has changed, free the previous one
+				free(entry->val);
+				entry->val = NULL;
+			}
 		}
 		// if we didn't, create a new one
 		else
@@ -73,25 +92,21 @@ void *memory_set(void *info)
 
 		if(*error == ERR_NONE)
 		{
-			// if we have set a value limit, apply it
-			if(MAX_VAL_SIZE <= 0)
+			// reserve space for our value as long as it was not the same
+			if(val_differs)
 			{
-				val_len = strlen(value) + 1;
-			}
-			else
-			{
-				val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
-			}
-			// reserve space for our value
-			entry->val = (char *) calloc(val_len, sizeof(char));
+				entry->val = (char *) calloc(val_len, sizeof(char));
 				
-			if(entry->val == NULL)
-			{
-				*error = ERR_ALLOC;
+				if(entry->val == NULL)
+				{
+					*error = ERR_ALLOC;
+				}
+				else
+				{
+					strncpy(entry->val, value, val_len);
+					entry->val[val_len - 1] = '\0';
+				}
 			}
-
-			strncpy(entry->val, value, val_len);
-			entry->val[val_len - 1] = '\0';
 
 			DEBUG_PRINT("notice: setting in db \"%s\" key \"%s\", \
 value \"%s\" and val_len \"%d\" is DONE\n",
