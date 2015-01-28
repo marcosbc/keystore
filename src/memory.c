@@ -50,6 +50,12 @@ void *memory_set(void *info)
 		perror("create_db");
 		*error = ERR_ALLOC;
 	}
+	// are we unsetting an entry?
+	else if(value[0] == '\0')
+	{
+		// we don't wan't to give any error if entry was not found
+		delete_entry(key, db);
+	}
 	else
 	{
 		entry = locate_entry(key, db);
@@ -82,7 +88,7 @@ void *memory_set(void *info)
 		// if we didn't, create a new one
 		else
 		{
-			entry = create_entry(key, &db);
+			entry = create_entry(key, db);
 
 			if(entry == NULL)
 			{

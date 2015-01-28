@@ -36,6 +36,18 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 	return *iterator;
 }
 
+store_db *locate_db(char *name, store_db *db)
+{
+	store_db *iterator = db;
+
+	while(iterator != NULL && 0 != strncmp(name, iterator->name, MAX_DB_SIZE))
+	{
+		iterator = iterator->next;
+	}
+
+	return iterator;
+}
+
 store_entry *create_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
 	store_entry *entry = NULL;
@@ -71,7 +83,7 @@ store_entry *create_entry(char key[MAX_KEY_SIZE], store_db *db)
 	return entry;
 }
 
-// locate an entry in the database, IT DOES NOT WORK OK
+// locate an entry in the database
 store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
 	DEBUG_PRINT("notice: locating entry\n");
@@ -86,17 +98,32 @@ store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 	return iterator;
 }
 
-// db? DOES IT WORK?
-store_db *locate_db(char *name, store_db *db)
+// delete an entry in the database, don't give error if it fails
+void delete_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
-	store_db *iterator = db;
+	DEBUG_PRINT("notice: deleting entry\n");
+	store_entry **iterator = &(db->ent);
+	store_entry *aux = NULL;
 
-	while(iterator != NULL && 0 != strncmp(name, iterator->name, MAX_DB_SIZE))
+	// find our collection
+	while(*iterator != NULL && 0 != strcmp(key, (*iterator)->key))
 	{
-		iterator = iterator->next;
+		*iterator = (*iterator)->brother;
 	}
 
-	return iterator;
+	if(*iterator != NULL)
+	{
+		DEBUG_PRINT("notice: %s: entry found for deletion\n", db->name);
+
+		aux = *iterator;
+
+		// free the value and the iterator itself
+		free((*iterator)->val);
+		free(*iterator);
+
+		// replace the pointer which is pointing at the iterator to next one
+		*iterator = (*iterator)->brother;
+	}
 }
 
 #ifdef __DEBUG__
