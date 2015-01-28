@@ -108,7 +108,7 @@ void delete_entry(char key[MAX_KEY_SIZE], store_db *db)
 	// find our collection
 	while(*iterator != NULL && 0 != strcmp(key, (*iterator)->key))
 	{
-		*iterator = (*iterator)->brother;
+		iterator = &((*iterator)->brother);
 	}
 
 	if(*iterator != NULL)
