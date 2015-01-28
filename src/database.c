@@ -36,11 +36,11 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 	return *iterator;
 }
 
-store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
+store_entry *create_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
 	store_entry *entry = NULL;
-	store_entry **iterator = &((*db)->ent); // only specific db entries
-	store_entry **complete_iterator = &((*db)->ent); // all entries
+	store_entry **iterator = &(db->ent); // only specific db entries
+	store_entry **complete_iterator = &(db->ent); // all entries
 
 	while(*complete_iterator != NULL)
 	{
