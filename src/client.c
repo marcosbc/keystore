@@ -43,8 +43,7 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		error = ERR_MEM_SEMOPEN;
 	}
 	// get our server's public config information
-	else if(error == ERR_NONE &&
-	   -1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
 	{
 		error = ERR_STORE_SHMLOAD;
 	}

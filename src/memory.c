@@ -215,11 +215,10 @@ int memory_clear(store_db **dbs)
 	return error;
 }
 
-int free_tree(store_db **dbs)
+void free_tree(store_db **dbs)
 {
 	DEBUG_PRINT("notice: freeing the tree of databases and entries\n");
 
-	int success = 0;
 	store_db *prev_db = NULL;
 	store_db *iterator = NULL;
 	store_entry *entry = NULL;
@@ -253,12 +252,8 @@ int free_tree(store_db **dbs)
 
 		// free previous element
 		free(prev_db);
-		prev_db = NULL;
 	}
 
 	*dbs = NULL;
 	write_unlock();
-	success = 1;
-	
-	return success;
 }
