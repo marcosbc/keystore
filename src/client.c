@@ -42,13 +42,8 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	{
 		error = ERR_MEM_SEMOPEN;
 	}
-	else
-	{
-		read_lock();
-	}
-
 	// get our server's public config information
-	if(error == ERR_NONE &&
+	else if(error == ERR_NONE &&
 	   -1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
 	{
 		error = ERR_STORE_SHMLOAD;
@@ -59,6 +54,8 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	}
 	else
 	{
+		read_lock();
+
 		DEBUG_PRINT("getting values from shared memory\n");
 
 		// set our mode and other variables
