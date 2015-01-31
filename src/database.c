@@ -115,14 +115,13 @@ void delete_entry(char key[MAX_KEY_SIZE], store_db *db)
 	{
 		DEBUG_PRINT("notice: %s: entry found for deletion\n", db->name);
 
+		// set auxiliary ptr, and link previous to next element
 		aux = *iterator;
+		*iterator = (*iterator)->brother;
 
 		// free the value and the iterator itself
-		free((*iterator)->val);
-		free(*iterator);
-
-		// replace the pointer which is pointing at the iterator to next one
-		*iterator = (*iterator)->brother;
+		free(aux->val);
+		free(aux);
 	}
 }
 
