@@ -138,19 +138,6 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		}
 	}
 
-	// if the response-info was received correctly
-	#ifdef __DEBUG__
-	if(error == ERR_NONE)
-	{
-		DEBUG_PRINT("notice: *** DONE ***\n\n");
-	}
-	else
-	{
-		DEBUG_PRINT("notice: something went wrong on the server side");
-		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-	}
-	#endif
-
 	if(s >= 0)
 	{
 		// close our socket to stop communication
@@ -246,7 +233,6 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		// initialize our socket
 		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			DEBUG_PRINT("error at socket creation\n");
 			print_perror("socket");
 			error = ERR_SOCKET;
 		}
@@ -317,18 +303,6 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		}
 
 	}
-
-	#ifdef __DEBUG__
-	if(error == ERR_NONE)
-	{
-		DEBUG_PRINT("notice: *** DONE ***\n\n");
-	}
-	else
-	{
-		DEBUG_PRINT("notice: something went wrong on the server side");
-		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-	}
-	#endif
 
 	if(s >= 0)
 	{
@@ -428,18 +402,6 @@ int store_halt()
 		}
 	}
 
-	#ifdef __DEBUG__
-	if(error == ERR_NONE)
-	{
-		DEBUG_PRINT("notice: *** DONE ***\n\n");
-	}
-	else
-	{
-		DEBUG_PRINT("notice: something went wrong on the server side");
-		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
-	}
-	#endif
-
 	if(s >= 0)
 	{
 		// close and unlink our socket
@@ -462,7 +424,7 @@ int store_act(int s, struct request_info *req_inf, struct request **req,
 	// only send data if there is something to send
 	if(req != NULL && req_inf->size > 0)
 	{
-		DEBUG_PRINT("notice: sending request data\n");
+		DEBUG_PRINT("notice: sending request data (%dB)\n", (int) req_inf->size);
 		write(s, *req, req_inf->size);
 	}
 
@@ -479,7 +441,7 @@ int store_act(int s, struct request_info *req_inf, struct request **req,
 	// only continue if we have something to receive
 	else if(res_inf->size > 0)
 	{
-		DEBUG_PRINT("notice: getting response data\n");
+		DEBUG_PRINT("notice: getting response data (%dB)\n", (int) res_inf->size);
 		if(NULL == (*res = (struct response *) malloc(res_inf->size)))
 		{
 			print_perror("malloc");
@@ -490,6 +452,18 @@ int store_act(int s, struct request_info *req_inf, struct request **req,
 			read(s, *res, res_inf->size);
 		}
 	}
+
+	#ifdef __DEBUG__
+	if(error == ERR_NONE)
+	{
+		DEBUG_PRINT("notice: *** DONE ***\n\n");
+	}
+	else
+	{
+		DEBUG_PRINT("notice: something went wrong on the server side");
+		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+	}
+	#endif
 
 	return error;
 }

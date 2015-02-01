@@ -118,8 +118,7 @@ void *memory_set(void *info)
 				}
 			}
 
-			DEBUG_PRINT("notice: setting in db \"%s\" key \"%s\", \
-value \"%s\" and val_len \"%d\" is DONE\n",
+			DEBUG_PRINT("notice: \"%s\": setting \"%s\"=\"%s\" (\"%d\"B) DONE\n",
 			            db_name, entry->key, entry->val, val_len);
 
 			// save the entry to our info variable (as output)
@@ -174,15 +173,13 @@ void *memory_get(void *info)
 	else
 	{
 		DEBUG_PRINT("notice: getting from db \"%s\" key \"%s\"\n",
-		            db->name,
-		    		((store_entry *) ent)->key);
+		            db->name, ((store_entry *) ent)->key);
 
 		// get the value from the db
 		// write semaphore not needed because the entry_info is not shared
 		strcpy(value, ent->val);
 
-		DEBUG_PRINT("notice: got value \"%s\" for key \"%s\" in db \"%s\"\n",
-		            value, key, db_name);
+		DEBUG_PRINT("notice: %s: got \"%s\"=\"%s\"\n", db_name, key, value);
 		
 		// save the entry and value to our info variable (as output)
 		((struct entry_inf *) info)->entry = ent;
@@ -193,12 +190,13 @@ void *memory_get(void *info)
 
 		if(ent != NULL)
 		{
-			DEBUG_PRINT("\nhas entry: %p with %s=%s\n\n", ent,
-			            ent->key, ent->val);
+			DEBUG_PRINT("\nnotice: %s: got entry %p \"%s\"=\"%s\"\n\n",
+			            db_name, ent, ent->key, ent->val);
 		}
 		else
 		{
-			DEBUG_PRINT("\nwe *DONT* have an entry, NULL: %p\n\n", ent);
+			DEBUG_PRINT("\nnotice: %s: entry \"%s\" *NOT FOUND* \n\n",
+			            db_name, key);
 		}
 		#endif
 	}
@@ -215,7 +213,6 @@ int memory_clear(store_db **dbs)
 	int error = ERR_NONE;
 
 	// first, clear databases and entries
-	DEBUG_PRINT("notice: unlinking semaphores\n");
 	free_tree(dbs);
 	
 	DEBUG_PRINT("notice: unlinking semaphores\n");
@@ -261,13 +258,13 @@ void free_tree(store_db **dbs)
 		while(entry != NULL)
 		{
 			// free it's value
-			DEBUG_PRINT("notice: free val %p\n", entry->val);
+			DEBUG_PRINT("notice: freeing val %p\n", entry->val);
 			free(entry->val);
 			prev = entry;
 			entry = entry->next;
 		
 			// go to the next one
-			DEBUG_PRINT("notice: free entry %p\n", prev);
+			DEBUG_PRINT("notice: freeing entry %p\n", prev);
 			free(prev);
 		}
 
@@ -275,7 +272,7 @@ void free_tree(store_db **dbs)
 		prev_db = iterator;
 		iterator = iterator->next;
 
-		DEBUG_PRINT("notice: free db: %p, next: %p\n", prev_db, iterator);
+		DEBUG_PRINT("notice: freeing db: %p, next: %p\n", prev_db, iterator);
 
 		// free previous element
 		free(prev_db);

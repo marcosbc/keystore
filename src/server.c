@@ -50,9 +50,10 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 	}
 	else
 	{
+		DEBUG_PRINT("notice: creating %d threads, to insert \"%s\"=\"%s\"...\n",
+		            num_dbs, key, val);
 		for(; i < num_dbs && ! therr; i++)
 		{
-			DEBUG_PRINT("setting key\n");
 			// create the entry information for setting
 			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
 			ent_inf[i].key[MAX_KEY_SIZE - 1] = '\0';
@@ -66,10 +67,8 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			therr = pthread_create(&thids[i], NULL, memory_set,
 			                       &ent_inf[i]);
 
-			DEBUG_PRINT("notice: thread#%d %d (\"%s\" => \
-\"%s\") to insert in db \"%s\"\n",
-			            i, (int) thids[i], key, val,
-						ent_inf[i].db_name);
+			DEBUG_PRINT("notice: thread#%d %d (\"%s\"=\"%s\"), insert in %s\n",
+			            i, (int) thids[i], key, val, ent_inf[i].db_name);
 
 			if(therr != ERR_NONE) 
 			{
@@ -85,15 +84,15 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 		// now, end our threads
 		for(i = 0; i < num_dbs && ! therr; i++)
 		{
-			DEBUG_PRINT("notice: ending thread#parent-%d %d...\n",
+			DEBUG_PRINT("notice: ending thread#%d %d...\n",
 			            i, (int) thids[i]);
 				
 			therr = pthread_join(thids[i], NULL);
 
 			if(therr != 0)
 			{
-				DEBUG_PRINT("notice: thread %d ended with error %d\n",
-				            (int) thids[i], therr);
+				DEBUG_PRINT("notice: thread#%d %d ended with error %d\n",
+				            i, (int) thids[i], therr);
 				print_perror("pthread_join");
 				err = ERR_THRJOIN;
 			}
@@ -101,8 +100,7 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			{
 				(*entries)[i] = ent_inf[i].entry;
 				err = ent_inf[i].error;
-				DEBUG_PRINT("notice: ended thread#parent-%d %d \
-returned value %d\n",
+				DEBUG_PRINT("notice: ended thread#%d %d, returned error %d\n",
 			                i, (int) thids[i], ent_inf[i].error);
 
 				if((*entries)[i] == NULL)
@@ -141,7 +139,7 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 	if(dbs == NULL)
 	{
 		err = ERR_DB;
-		DEBUG_PRINT("dbs is NULL\n");
+		DEBUG_PRINT("notice: dbs is NULL\n");
 	}
 	else if(NULL == (*entries = (store_entry **) malloc(num_dbs
 	                                                  * sizeof(store_entry *)))
@@ -154,11 +152,10 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 	}
 	else
 	{
-		DEBUG_PRINT("looping %d times...\n", num_dbs);
+		DEBUG_PRINT("notice: creating %d threads, to retrieve \"%s\"...\n",
+		            num_dbs, key);
 		for(i = 0; i < num_dbs && ! therr; i++)
 		{
-			DEBUG_PRINT("loop %d\n", i);
-
 			// create the entry information for setting
 			strncpy(ent_inf[i].key, key, MAX_KEY_SIZE - 1);
 			ent_inf[i].value = NULL;
@@ -172,8 +169,7 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 			                       &ent_inf[i]);
 
 			// check val, it's null probably
-			DEBUG_PRINT("notice: thread#%d %d (key \"%s\") \
- to search in db \"%s\"\n",
+			DEBUG_PRINT("notice: thread#%d %d (key \"%s\"), find in db %s\n",
 			            i, (int) thids[i], key, ent_inf[i].db_name);
 
 			if(therr != 0)
@@ -197,16 +193,15 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 
 			if(therr != 0)
 			{
-				DEBUG_PRINT("notice: thread %d ended with error %d\n",
-				            (int) thids[i], therr);
+				DEBUG_PRINT("notice: thread#%d %d ended with error %d\n",
+				            i, (int) thids[i], therr);
 				print_perror("pthread_join");
 				err = ERR_THRJOIN;
 			}
 			else
 			{
 				err = ent_inf[i].error;
-				DEBUG_PRINT("notice: ended thread#%d %d, returned %d\n",
-				            i, (int) thids[i], err);
+				DEBUG_PRINT("notice: ended thread#%d %d", i, (int) thids[i]);
 
 				if(err != ERR_NONE || ent_inf[i].entry == NULL)
 				{
@@ -271,7 +266,7 @@ int store_server_act(int s, store_db **dbs)
 
 		// init our start time
 		ftime(&start_tm);
-		DEBUG_PRINT("timer started\n");
+		DEBUG_PRINT("notice: timer started\n");
 	
 		#ifdef __DEBUG__
 		read_lock();

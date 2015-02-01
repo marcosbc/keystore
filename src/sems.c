@@ -89,16 +89,16 @@ int sems_close()
 
 void read_lock()
 {
-	DEBUG_PRINT("readlock: going for rw wait...\n");
+	DEBUG_PRINT("notice: read-lock: going for rw wait...\n");
 
 	sem_wait(sem_rw);
 	
-	DEBUG_PRINT("readlock: done\n");
+	DEBUG_PRINT("notice: read-lock: done\n");
 }
 
 void read_unlock()
 {
-	DEBUG_PRINT("readunlock\n");
+	DEBUG_PRINT("notice: read-unlock\n");
 
 	sem_post(sem_rw);
 }
@@ -107,33 +107,32 @@ void write_lock()
 {
 	int i;
 
-	DEBUG_PRINT("write: going for mutex wait, rw=%p and mut=%p...\n",
-	            sem_rw, sem_mutex);
+	DEBUG_PRINT("notice: write-lock: going for mutex wait\n");
 
 	// in case we have multiple writers
 	sem_wait(sem_mutex);
 	
-	DEBUG_PRINT("write: going for write wait...\n");
+	DEBUG_PRINT("notice: write-lock: going for write wait...\n");
 			
 	for(i = 0; i < MAX_READERS_AT_ONCE; i++)
 	{
-		DEBUG_PRINT("write: iteration %d\n", i);
+		DEBUG_PRINT("notice: write-lock: iteration %d\n", i);
 		// we have a maximum number of readers
 		// but we want to be able to read simultaneously
 		sem_wait(sem_rw);
 	}
 
-	DEBUG_PRINT("write: going for mutex post...\n");
+	DEBUG_PRINT("notice: write-lock: going for mutex post...\n");
 
 	// we shouldn't have problems with multiple writers now
 	sem_post(sem_mutex);
 	
-	DEBUG_PRINT("write: done\n");
+	DEBUG_PRINT("notice: write-lock: done\n");
 }
 
 void write_unlock()
 {
-	DEBUG_PRINT("writeunlock\n");
+	DEBUG_PRINT("notice: write-unlock\n");
 	
 	int i;
 
