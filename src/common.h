@@ -36,6 +36,8 @@
 #define ERR_SEMCLOSE_MSG "while closing semaphores"
 #define ERR_SOCKET 7
 #define ERR_SOCKET_MSG "couldn't create socket"
+#define ERR_INVALID_MODE 8
+#define ERR_INVALID_MODE_MSG "mode not recognized by the server"
 // #define ERR_CHK 9
 // #define ERR_CHK_MSG "checksum doesn't match"
 
@@ -100,6 +102,7 @@ struct response {
 	// - a simulated array of values (single-pointer array of strings)
 };
 
+void print_common_error_case(int error);
 double time_diff(struct timeval start, struct timeval end);
 void print_error(const char *msg, ...);
 void print_perror(const char *msg);

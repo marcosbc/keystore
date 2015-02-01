@@ -2,6 +2,39 @@
 #include <sys/time.h>
 #include "common.h"
 
+void print_common_error_case(int error)
+{
+	switch(error)
+	{
+		// common errors between server and client
+		case ERR_ALLOC:
+			print_error(ERR_ALLOC_MSG);
+			break;
+		case ERR_SOCKET:
+			print_error(ERR_SOCKET_MSG);
+			break;
+		case ERR_SHMAT:
+			print_error(ERR_SHMAT_MSG);
+			break;
+		case ERR_SHMDT:
+			print_error(ERR_SHMDT_MSG);
+			break;
+		case ERR_SEMOPEN:
+			print_error(ERR_SEMOPEN_MSG);
+			break;
+		case ERR_SEMCLOSE:
+			print_error(ERR_SEMCLOSE_MSG);
+			break;
+		case ERR_INVALID_MODE:
+			print_error(ERR_INVALID_MODE_MSG);
+			break;
+
+		case ERR_NONE:
+		default:
+			break;
+	}
+}
+
 // return the time difference in milliseconds
 double time_diff(struct timeval start, struct timeval end)
 {

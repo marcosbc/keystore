@@ -355,7 +355,7 @@ int store_server_act(int s, store_db **dbs)
 						}
 						break;
 					default:
-						res_inf.error = 1; // = ERR_INVALID_MODE
+						res_inf.error = ERR_INVALID_MODE;
 				}
 
 				write(client_s, &res_inf, sizeof(struct response_info));
@@ -375,7 +375,7 @@ int store_server_act(int s, store_db **dbs)
 					store_stop(); // no error
 					break;
 				default:
-					res_inf.error = 1; // = ERR_INCORRECT_MODE
+					res_inf.error = ERR_INVALID_MODE;
 			}
 
 			// send the result back to the client
