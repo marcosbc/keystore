@@ -292,7 +292,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		res_val_ptr = (char *) (res_size_ptr + res->num);
 
 		// now we checked everything is ok, print result
-		for(i = 0; i < num_dbs; i++)
+		for(i = 0; i < res->num; i++)
 		{
 			// print result
 			printf(MSG_ENTRY, dbs_ptr + i * max_db_len, key, res_val_ptr);
