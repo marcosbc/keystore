@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include "common.h"
+#include "daemon.h"
 #include "types.h"
 #include "sems.h"
 #include "memory.h"
@@ -60,11 +61,12 @@ void *memory_set(void *info)
 	{
 		entry = locate_entry(key, db);
 
-		// if we have set a value limit, apply it
+		// no value size limit?
 		if(MAX_VAL_SIZE <= 0)
 		{
 			val_len = strlen(value) + 1;
 		}
+		// if we have set a value limit, apply it
 		else
 		{
 			val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
@@ -92,6 +94,7 @@ void *memory_set(void *info)
 
 			if(entry == NULL)
 			{
+				print_perror("create_entry");
 				*error = ERR_ALLOC;
 			}
 		}
@@ -101,10 +104,11 @@ void *memory_set(void *info)
 			// reserve space for our value as long as it was not the same
 			if(val_differs)
 			{
-				entry->val = (char *) calloc(val_len, sizeof(char));
+				entry->val = (char *) malloc(val_len * sizeof(char));
 				
 				if(entry->val == NULL)
 				{
+					print_perror("malloc");
 					*error = ERR_ALLOC;
 				}
 				else
@@ -161,9 +165,10 @@ void *memory_get(void *info)
 	{
 		*error = ERR_ENTRY;
 	}
-	else if(NULL == (value = (char *) calloc((strlen(ent->val) + 1),
-	                                         sizeof(char))))
+	else if(NULL == (value = (char *) malloc((strlen(ent->val) + 1)
+	                                         * sizeof(char))))
 	{
+		print_perror("malloc");
 		*error = ERR_ALLOC;
 	}
 	else
@@ -209,8 +214,30 @@ int memory_clear(store_db **dbs)
 {
 	int error = ERR_NONE;
 
+	// first, clear databases and entries
+	DEBUG_PRINT("notice: unlinking semaphores\n");
 	free_tree(dbs);
-	error = sems_clear();
+	
+	DEBUG_PRINT("notice: unlinking semaphores\n");
+	if(! sems_close())
+	{
+		error = ERR_SEMCLOSE;
+		perror("sem_unlink");
+	}
+
+	if(-1 == sem_unlink(SEM_MUTEX))
+	{
+		error = ERR_SEMUNLINK;
+		print_error("couldn't unlink semaphore \"%s\"", SEM_RW);
+		perror("sem_unlink");
+	}
+
+	if(-1 == sem_unlink(SEM_RW))
+	{
+		error = ERR_SEMUNLINK;
+		print_error("couldn't unlink semaphore \"%s\"", SEM_MUTEX);
+		perror("sem_unlink");
+	}
 
 	return error;
 }
@@ -222,7 +249,7 @@ void free_tree(store_db **dbs)
 	store_db *prev_db = NULL;
 	store_db *iterator = NULL;
 	store_entry *entry = NULL;
-	store_entry *prev = NULL;
+	store_entry *prev = NULL; // previous entry
 
 	write_lock();
 	iterator = *dbs;

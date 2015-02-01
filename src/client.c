@@ -7,6 +7,7 @@
 #include <fcntl.h> // O_CREAT, ...
 #include <pthread.h>
 #include "common.h"
+#include "keystore.h"
 #include "client.h"
 #include "database.h"
 #include "sems.h"
@@ -40,16 +41,19 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 
 	if(! sems_open())
 	{
-		error = ERR_MEM_SEMOPEN;
+		print_perror("semopen");
+		error = ERR_SEMOPEN;
 	}
 	// get our server's public config information
 	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
 	{
-		error = ERR_STORE_SHMLOAD;
+		print_perror("shmget");
+		error = ERR_SHMLOAD;
 	}
 	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
 	{
-		error = ERR_STORE_SHMAT;
+		print_perror("shmat");
+		error = ERR_SHMAT;
 	}
 	else
 	{
@@ -82,7 +86,8 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	{
 		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			error = ERR_SOCKETCREATE;
+			print_perror("socket");
+			error = ERR_SOCKET;
 		}
 		// connect to socket
 		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
@@ -152,11 +157,11 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		close(s);
 	}
 
-	if(error != ERR_STORE_SHMLOAD && error != ERR_STORE_SHMAT
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT
 	   && -1 == shmdt(store))
 	{
 		print_perror("shmdt");
-		error = ERR_STORE_SHMDT;
+		error = ERR_SHMDT;
 	}
 
 	free(req);
@@ -199,16 +204,19 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	// initialize our semaphores and begin the semaphore lock
 	if(! sems_open())
 	{
-		error = ERR_MEM_SEMOPEN;
+		print_perror("semopen");
+		error = ERR_SEMOPEN;
 	}
 	// get our server's public config information
 	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
 	{
-		error = ERR_STORE_SHMLOAD;
+		print_perror("shmget");
+		error = ERR_SHMLOAD;
 	}
 	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
 	{
-		error = ERR_STORE_SHMAT;
+		print_perror("shmat");
+		error = ERR_SHMAT;
 	}
 	else
 	{
@@ -239,7 +247,8 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
 			DEBUG_PRINT("error at socket creation\n");
-			error = ERR_SOCKETCREATE;
+			print_perror("socket");
+			error = ERR_SOCKET;
 		}
 		// connect to socket
 		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
@@ -302,9 +311,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		for(i = 0; i < num_dbs; i++)
 		{
 			// print result
-			printf("%s: %s=%s\n", dbs_ptr + i * max_db_len,
-			                      key,
-			                      res_val_ptr);
+			printf(MSG_ENTRY, dbs_ptr + i * max_db_len, key, res_val_ptr);
 			res_val_ptr += *res_size_ptr;
 			res_size_ptr++;
 		}
@@ -329,11 +336,11 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		close(s);
 	}
 
-	if(error != ERR_STORE_SHMLOAD && error != ERR_STORE_SHMAT
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT
 	   && -1 == shmdt(store))
 	{
 		print_perror("shmdt");
-		error = ERR_STORE_SHMDT;
+		error = ERR_SHMDT;
 	}
 
 	free(req);
@@ -362,16 +369,19 @@ int store_halt()
 
 	if(! sems_open())
 	{
-		error = ERR_MEM_SEMOPEN;
+		print_perror("shmopen");
+		error = ERR_SEMOPEN;
 	}
 	// get our server's public config information
 	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
 	{
-		error = ERR_STORE_SHMLOAD;
+		print_perror("shmget");
+		error = ERR_SHMLOAD;
 	}
 	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
 	{
-		error = ERR_STORE_SHMAT;
+		print_perror("shmat");
+		error = ERR_SHMAT;
 	}
 	else
 	{
@@ -397,7 +407,8 @@ int store_halt()
 	{
 		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			error = ERR_SOCKETCREATE;
+			print_perror("socket");
+			error = ERR_SOCKET;
 		}
 		// connect to socket
 		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
@@ -451,6 +462,7 @@ int store_act(int s, struct request_info *req_inf, struct request **req,
 	// only send data if there is something to send
 	if(req != NULL && req_inf->size > 0)
 	{
+		DEBUG_PRINT("notice: sending request data\n");
 		write(s, *req, req_inf->size);
 	}
 
@@ -460,12 +472,14 @@ int store_act(int s, struct request_info *req_inf, struct request **req,
 
 	if(res_inf->error != ERR_NONE)
 	{
+		DEBUG_PRINT("notice: no response data to receive\n");
 		error = res_inf->error;
 		// we should add a checksum to check if data is ok
 	}
 	// only continue if we have something to receive
 	else if(res_inf->size > 0)
 	{
+		DEBUG_PRINT("notice: getting response data\n");
 		if(NULL == (*res = (struct response *) malloc(res_inf->size)))
 		{
 			print_perror("malloc");

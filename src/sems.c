@@ -87,35 +87,6 @@ int sems_close()
 	return ok;
 }
 
-int sems_clear()
-{
-	int error = ERR_NONE;
-	
-	DEBUG_PRINT("notice: unlinking semaphores\n");
-
-	if(! sems_close())
-	{
-		error = ERR_MEM_SEMCLOSE;
-		perror("sem_unlink");
-	}
-
-	if(-1 == sem_unlink(SEM_MUTEX))
-	{
-		error = ERR_MEM_SEMUNLINK;
-		print_error("couldn't unlink semaphore \"%s\"", SEM_RW);
-		perror("sem_unlink");
-	}
-
-	if(-1 == sem_unlink(SEM_RW))
-	{
-		error = ERR_MEM_SEMUNLINK;
-		print_error("couldn't unlink semaphore \"%s\"", SEM_MUTEX);
-		perror("sem_unlink");
-	}
-
-	return error;
-}
-
 void read_lock()
 {
 	DEBUG_PRINT("readlock: going for rw wait...\n");

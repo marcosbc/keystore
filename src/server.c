@@ -9,6 +9,7 @@
 #include <fcntl.h> // O_CREAT, ...
 #include <signal.h>
 #include "common.h"
+#include "daemon.h"
 #include "server.h"
 #include "memory.h"
 #include "database.h"
@@ -38,12 +39,13 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 	DEBUG_PRINT("notice: supplied key \"%s\", value \"%s\", num_dbs %d\n",
 	            key, val, num_dbs);
 
-	if(NULL == (*entries = (store_entry **) calloc(num_dbs,
-	                                                    sizeof(store_entry *)))
-	|| NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
-	                                                 sizeof(struct entry_inf)))
-	|| NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
+	if(NULL == (*entries = (store_entry **) malloc(num_dbs
+	                                                  * sizeof(store_entry *)))
+	|| NULL == (ent_inf = (struct entry_inf *) malloc(num_dbs
+	                                               * sizeof(struct entry_inf)))
+	|| NULL == (thids = (pthread_t *) malloc(num_dbs * sizeof(pthread_t))))
 	{
+		print_perror("malloc");
 		err = ERR_ALLOC;
 	}
 	else
@@ -71,6 +73,7 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 
 			if(therr != ERR_NONE) 
 			{
+				print_perror("pthread_create");
 				err = ERR_THR;
 			}
 		}
@@ -91,6 +94,7 @@ int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
 			{
 				DEBUG_PRINT("notice: thread %d ended with error %d\n",
 				            (int) thids[i], therr);
+				print_perror("pthread_join");
 				err = ERR_THRJOIN;
 			}
 			else
@@ -139,18 +143,18 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 		err = ERR_DB;
 		DEBUG_PRINT("dbs is NULL\n");
 	}
-	else if(NULL == (*entries = (store_entry **) calloc(num_dbs,
-	                                                    sizeof(store_entry *)))
-	     || NULL == (ent_inf = (struct entry_inf *) calloc(num_dbs,
-	                                                 sizeof(struct entry_inf)))
-	     || NULL == (thids = (pthread_t *) calloc(num_dbs, sizeof(pthread_t))))
+	else if(NULL == (*entries = (store_entry **) malloc(num_dbs
+	                                                  * sizeof(store_entry *)))
+	     || NULL == (ent_inf = (struct entry_inf *) malloc(num_dbs
+	                                               * sizeof(struct entry_inf)))
+	     || NULL == (thids = (pthread_t *) malloc(num_dbs * sizeof(pthread_t))))
 	{
-		DEBUG_PRINT("err at alloc\n");
+		print_perror("malloc");
 		err = ERR_ALLOC;
 	}
 	else
 	{
-		DEBUG_PRINT("looping...\n");
+		DEBUG_PRINT("looping %d times...\n", num_dbs);
 		for(i = 0; i < num_dbs && ! therr; i++)
 		{
 			DEBUG_PRINT("loop %d\n", i);
@@ -174,6 +178,7 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 
 			if(therr != 0)
 			{
+				print_perror("pthread_create");
 				err = ERR_THR;
 			}
 		}
@@ -194,22 +199,24 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 			{
 				DEBUG_PRINT("notice: thread %d ended with error %d\n",
 				            (int) thids[i], therr);
+				print_perror("pthread_join");
 				err = ERR_THRJOIN;
 			}
 			else
 			{
-				(*entries)[i] = ent_inf[i].entry;
 				err = ent_inf[i].error;
 				DEBUG_PRINT("notice: ended thread#%d %d, returned %d\n",
 				            i, (int) thids[i], err);
 
-				if((*entries)[i] == NULL)
+				if(err != ERR_NONE || ent_inf[i].entry == NULL)
 				{
+					(*entries)[i] = NULL;
 					DEBUG_PRINT("notice: %s: found *NOTHING* for \"%s\"\n",
-					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key);
+					            db_names + i*MAX_DB_SIZE, key);
 				}
 				else
 				{
+					(*entries)[i] = ent_inf[i].entry;
 					DEBUG_PRINT("notice: %s: found \"%s\": val \"%s\"\n",
 					            db_names + i*MAX_DB_SIZE, (*entries)[i]->key,
 								(*entries)[i]->val);
@@ -260,11 +267,11 @@ int store_server_act(int s, store_db **dbs)
 
 	if(-1 != (client_s = accept(s, (struct sockaddr *) &client, &client_len)))
 	{
-		printf("connection incoming\n");
+		printf(MSG_CONN_INCOMING);
 
 		// init our start time
 		ftime(&start_tm);
-		DEBUG_PRINT("has t_start\n");
+		DEBUG_PRINT("timer started\n");
 	
 		#ifdef __DEBUG__
 		read_lock();
@@ -282,9 +289,9 @@ int store_server_act(int s, store_db **dbs)
 		{
 			if(NULL == (req = (struct request *) malloc(req_inf.size)))
 			{
+				print_perror("malloc");
 				error = ERR_ALLOC;
 				res_inf.error = error;
-				print_perror("malloc");
 			}
 			else
 			{
@@ -388,9 +395,8 @@ int store_server_act(int s, store_db **dbs)
 
 		// init our start time
 		ftime(&end_tm);
-		printf("connection closed after %.2f ms\n",
-		       (float) 1000.0 * (end_tm.time - start_tm.time)
-			           + (end_tm.millitm - start_tm.millitm));
+		printf(MSG_TIME_ELAPSED, (float) 1000.0 * (end_tm.time - start_tm.time)
+			                     + (end_tm.millitm - start_tm.millitm));
 	}
 
 	free(result);
@@ -430,25 +436,22 @@ int store_server_init()
 	   || (store_info *) -1 != (store = shmat(shmid, NULL, 0)))
 	{
 		error = ERR_SESSION;
-		print_error(ERR_SESSION_MSG);
-		DEBUG_PRINT("shmid=%d, store=%p (-1 = %p)\n", shmid,
-		            store, (store_info *) -1);
 	}
 	// we shouldn't be able to initialize memory when it has already been done
 	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info),
 	                         IPC_CREAT | IPC_EXCL | 0664)))
 	{
-		error = ERR_STORE_SHMCREATE;
+		error = ERR_SHMCREATE;
 		print_perror("shmget");
 	}
 	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
 	{
-		error = ERR_STORE_SHMAT;
+		error = ERR_SHMAT;
 		print_perror("shmat");
 	}
 	else if(! memory_init())
 	{
-		error = ERR_MEM_SEMOPEN;
+		error = ERR_SEMOPEN;
 		print_perror("sem_open");
 	}
 	else
@@ -487,15 +490,11 @@ int store_server_init()
 	// if we were able to store the info successfully, proceed
 	if(error == ERR_NONE)
 	{
-		if(NULL != fopen(sock_path, "r"))
-		{
-			print_error("socket connection already exists");
-			error = ERR_SOCKETEXIST;
-		}
 		// create our socket
-		else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			error = ERR_SOCKETCREATE;
+			print_perror("socket");
+			error = ERR_SOCKET;
 		}
 		// bind socket to file
 		else if (bind(s, (struct sockaddr *) &addr, len) < 0)
@@ -510,21 +509,16 @@ int store_server_init()
 		}
 		else
 		{
-			// *** import our file system data ***
-			// dbs = store_import();
-
 			// daemon
-			printf("database running...\n");
+			printf(MSG_RUNNING);
 			while(! stop_server)
 			{
 				DEBUG_PRINT("\n\nnotice: iteration with db %p\n", dbs);
 				error = store_server_act(s, &dbs);
 			}
-
-			printf("stopping server...\n");
+			printf(MSG_STOPPING);
 		}
 
-		DEBUG_PRINT("notice: socket 's' has value '%d'\n", s);
 		// if the socket was created
 		if(s >= 0)
 		{
@@ -537,26 +531,32 @@ int store_server_init()
 	}
 
 	// unmap our shared memory
-	if(error != ERR_STORE_SHMCREATE && error != ERR_SESSION
-	   && error != ERR_STORE_SHMAT && -1 == shmdt(store))
+	if(error != ERR_SHMCREATE && error != ERR_SESSION
+	   && error != ERR_SHMAT && -1 == shmdt(store))
 	{
-		error = ERR_STORE_SHMDT;
+		print_perror("shmdt");
+		error = ERR_SHMDT;
 	}
 
 	// now that we're done, remove the shared memory
-	if(error != ERR_SESSION && error != ERR_STORE_SHMCREATE
+	if(error != ERR_SESSION && error != ERR_SHMCREATE
 	   && -1 == shmctl(shmid, IPC_RMID, NULL))
 	{
-		error = ERR_STORE_SHMCTL;
+		print_perror("shmctl");
+		error = ERR_SHMCTL;
 	}
 
-	if(error != ERR_MEM_SEMOPEN && error != ERR_SESSION)
+	if(error != ERR_SEMOPEN && error != ERR_SESSION)
 	{
 		// clear our semaphores and free memory
 		error = memory_clear(&dbs);
 	}
 
-	printf("server stopped\n");
+	// only show stop message if the server was running before
+	if(stop_server != 0)
+	{
+		printf(MSG_STOPPED);
+	}
 
 	return error;
 }

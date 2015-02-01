@@ -42,9 +42,8 @@ int main(int argc, char *argv[])
 	else
 	{
 		error_type = ERR_USE;
-		printf(ERR_USE_MSG, argv[0]);
+		fprintf(stderr, ERR_USE_MSG, argv[0]);
 	}
-
 	print_error_case(error_type);
 
 	return error_type;
@@ -81,4 +80,45 @@ int check_arguments(int num, char *args[], int *mode)
 	}
 
 	return ok;
+}
+
+void print_error_case(int error)
+{
+	switch(error)
+	{
+		// common errors between server and client
+		case ERR_ALLOC:
+			print_error(ERR_ALLOC_MSG);
+			break;
+		case ERR_SOCKET:
+			print_error(ERR_SOCKET_MSG);
+			break;
+		case ERR_SHMAT:
+			print_error(ERR_SHMAT_MSG);
+			break;
+		case ERR_SHMDT:
+			print_error(ERR_SHMDT_MSG);
+			break;
+		case ERR_SEMOPEN:
+			print_error(ERR_SEMOPEN_MSG);
+			break;
+		case ERR_SEMCLOSE:
+			print_error(ERR_SEMCLOSE_MSG);
+			break;
+
+		// non-common errors
+		case ERR_SHMLOAD:
+			print_error(ERR_SHMLOAD_MSG);
+			break;
+		case ERR_CONNECT:
+			print_error(ERR_CONNECT_MSG);
+			break;
+		case ERR_SIZE:
+			print_error(ERR_SIZE_MSG);
+			break;
+
+		case ERR_NONE:
+		default:
+			break;
+	}
 }

@@ -18,51 +18,35 @@
 #define DEBUG_PRINT(...) {}
 #endif
 
-#define KEY_ID 'K'
-
+// common error types (no. 1 is always ERR_USE)
 #define ERR_NONE 0
-#define ERR_SESSION 2
-#define ERR_SESSION_MSG "you already have a session running"
-#define ERR_ALLOC 5
-#define ERR_ALLOC_MSG "memory allocation returned NULL"
-#define ERR_STORE_SHMCREATE 10
-#define ERR_STORE_SHMCREATE_MSG "couldn't create shared memory"
-#define ERR_STORE_SHMLOAD 11
-#define ERR_STORE_SHMLOAD_MSG "couldn't map shared memory"
-#define ERR_STORE_SHMAT 12
-#define ERR_STORE_SHMAT_MSG "while mapping shared memory segment"
-#define ERR_STORE_SHMDT 13
-#define ERR_STORE_SHMDT_MSG "couldn't unmap shared memory"
-#define ERR_STORE_SHMCTL 14
-#define ERR_STORE_SHMCTL_MSG "while removing our shared memory segment"
-#define ERR_MEM_SEMOPEN 15
-#define ERR_MEM_SEMOPEN_MSG "while opening semaphores"
-#define ERR_MEM_SEMUNLINK 16
-#define ERR_MEM_SEMUNLINK_MSG "while unlinking semaphores"
-#define ERR_MEM_SEMCLOSE 17
-#define ERR_MEM_SEMCLOSE_MSG "while closing semaphores"
-#define ERR_THR 20
-#define ERR_THR_MSG ""
-#define ERR_THRJOIN 21
-#define ERR_THRJOIN_MSG "error in thread join"
-#define ERR_DB 30
-#define ERR_DB_MSG "db not found"
-#define ERR_ENTRY 31
-#define ERR_ENTRY_MSG "entry not found"
-#define ERR_SOCKETEXIST 40
-#define ERR_SOCKETCREATE 41
-#define ERR_BIND 42
-#define ERR_LISTEN 43
-#define ERR_ACCEPT 44
-#define ERR_CONNECT 44
-#define ERR_SIZE 45 // actually it is a flag
+#define ERR_USE 1
+#define ERR_ALLOC 2
+#define ERR_ALLOC_MSG "memory allocation couldn't be done"
+#define ERR_SHMAT 3
+#define ERR_SHMAT_MSG "while mapping shared memory segment"
+#define ERR_SHMDT 4
+#define ERR_SHMDT_MSG "couldn't unmap shared memory"
+#define ERR_SEMOPEN 5
+#define ERR_SEMOPEN_MSG "while opening semaphores"
+#define ERR_SEMCLOSE 6
+#define ERR_SEMCLOSE_MSG "while closing semaphores"
+#define ERR_SOCKET 7
+#define ERR_SOCKET_MSG "couldn't create socket"
+// #define ERR_CHK 9
+// #define ERR_CHK_MSG "checksum doesn't match"
 
+// server modes
 #define STORE_NUM_MODES 3
 #define STORE_MODE_SET_ID 0
 #define STORE_MODE_GET_ID 1
 #define STORE_MODE_STOP_ID 2
 
+// socket path max size
 #define MAX_SOCK_PATH_SIZE 100
+
+// shared memory key
+#define KEY_ID 'K'
 
 // for extracting info from shared memory
 typedef struct info {
@@ -109,11 +93,10 @@ struct response {
 
 	// the response will also include right after this:
 	// - an array of integers of the size of each val: int val_size[num]
+	//   techically not needed thanks to '\0'
 	// - a simulated array of values (single-pointer array of strings)
-	// techically not needed thanks to '\0'
 };
 
-void print_error_case(int error);
 void print_error(const char *msg, ...);
 void print_perror(const char *msg);
 int max(int x, int y);

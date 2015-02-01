@@ -1,4 +1,5 @@
 #ifndef __KEYSTORE_DATABASE__
+#define __KEYSTORE_DATABASE__
 
 #include "types.h"
 
