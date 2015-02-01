@@ -1,6 +1,15 @@
-#include <stdio.h>
 #include <stdarg.h> // va_list and related functions
+#include <sys/time.h>
 #include "common.h"
+
+// return the time difference in milliseconds
+double time_diff(struct timeval start, struct timeval end)
+{
+	double start_time = (double) start.tv_sec * 1000000 + (double) start.tv_usec;
+	double end_time = (double) end.tv_sec * 1000000 + (double) end.tv_usec;
+
+	return (end_time - start_time) / 1000;
+}
 
 void print_error(const char *msg, ...)
 {

@@ -1,10 +1,7 @@
-#include <stdio.h>
 #include <sys/shm.h>
 #include <sys/socket.h> // socket related things
 #include <sys/un.h> // socket related things
 #include <sys/stat.h> // mkfifo
-#include <sys/timeb.h> 
-#include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h> // O_CREAT, ...
 #include <signal.h>
@@ -229,7 +226,7 @@ int store_read(char key[MAX_KEY_SIZE], int num_dbs, char *db_names,
 int store_server_act(int s, store_db **dbs)
 {
 	int error = 0;
-	struct timeb start_tm, end_tm;
+	struct timeval start, end;
 	int i = 0;
 
 	// key, value and db pointers for the request
@@ -265,9 +262,9 @@ int store_server_act(int s, store_db **dbs)
 		printf(MSG_CONN_INCOMING);
 
 		// init our start time
-		ftime(&start_tm);
-		DEBUG_PRINT("notice: timer started\n");
-	
+		gettimeofday(&start, NULL);
+		DEBUG_PRINT("notice: request timer started\n");
+
 		#ifdef __DEBUG__
 		read_lock();
 		if(*dbs != NULL)
@@ -389,9 +386,8 @@ int store_server_act(int s, store_db **dbs)
 		close(client_s);
 
 		// init our start time
-		ftime(&end_tm);
-		printf(MSG_TIME_ELAPSED, (float) 1000.0 * (end_tm.time - start_tm.time)
-			                     + (end_tm.millitm - start_tm.millitm));
+		gettimeofday(&end, NULL);
+		printf(MSG_REQUEST_TIME_ELAPSED, time_diff(start, end));
 	}
 
 	free(result);
@@ -404,15 +400,22 @@ int store_server_act(int s, store_db **dbs)
 int store_server_init()
 {
 	int error = 0;
-	int shmid;
+	struct timeval start, running, end;
+
+	// for shared memory operations
+	int shmid = -1;
 	key_t shm_key = ftok(".", KEY_ID);
-	struct sigaction act;
-	int s = -1; // our socket
-	struct sockaddr_un addr;
-	int len;
 	store_db *dbs = NULL;
 	store_info *store = NULL; // shared memory to store public configuration
+
+	// socket related
+	int s = -1; // our socket id
 	char sock_path[MAX_SOCK_PATH_SIZE];
+	struct sockaddr_un addr;
+	int len;
+
+	// deal with signals
+	struct sigaction act;
 
 	// set up signal to stop server correctly
 	act.sa_handler = store_stop;
@@ -451,6 +454,10 @@ int store_server_init()
 	}
 	else
 	{
+		// init our start time
+		gettimeofday(&start, NULL);
+		DEBUG_PRINT("notice: request timer started\n");
+
 		write_lock();
 
 		// init our socket info, everything went ok
@@ -504,8 +511,11 @@ int store_server_init()
 		}
 		else
 		{
+			// to get the time it took to start running
+			gettimeofday(&running, NULL);
+			printf(MSG_RUNNING, time_diff(start, running));
+
 			// daemon
-			printf(MSG_RUNNING);
 			while(! stop_server)
 			{
 				DEBUG_PRINT("\n\nnotice: iteration with db %p\n", dbs);
@@ -550,7 +560,8 @@ int store_server_init()
 	// only show stop message if the server was running before
 	if(stop_server != 0)
 	{
-		printf(MSG_STOPPED);
+		gettimeofday(&end, NULL);
+		printf(MSG_STOPPED, time_diff(start, end) / 1000);
 	}
 
 	return error;

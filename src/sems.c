@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <semaphore.h>
 #include <fcntl.h> // O_CREAT, ...
 #include "common.h"

@@ -1,9 +1,7 @@
-#include <stdio.h>
 #include <sys/socket.h> // socket related things
 #include <sys/un.h> // socket related things
 #include <sys/stat.h> // mkfifo
 #include <sys/shm.h> // 
-#include <unistd.h>
 #include <fcntl.h> // O_CREAT, ...
 #include <pthread.h>
 #include "common.h"
@@ -144,7 +142,7 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		close(s);
 	}
 
-	if(error != ERR_SHMLOAD && error != ERR_SHMAT
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT && error != ERR_SEMOPEN
 	   && -1 == shmdt(store))
 	{
 		print_perror("shmdt");
@@ -310,7 +308,7 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		close(s);
 	}
 
-	if(error != ERR_SHMLOAD && error != ERR_SHMAT
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT && error != ERR_SEMOPEN
 	   && -1 == shmdt(store))
 	{
 		print_perror("shmdt");
@@ -406,6 +404,13 @@ int store_halt()
 	{
 		// close and unlink our socket
 		close(s);
+	}
+
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT && error != ERR_SEMOPEN
+	   && -1 == shmdt(store))
+	{
+		print_perror("shmdt");
+		error = ERR_SHMDT;
 	}
 
 	return error;

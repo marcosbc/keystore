@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/time.h>
 
 // #define __DEBUG__
 #ifdef __DEBUG__
@@ -97,6 +100,7 @@ struct response {
 	// - a simulated array of values (single-pointer array of strings)
 };
 
+double time_diff(struct timeval start, struct timeval end);
 void print_error(const char *msg, ...);
 void print_perror(const char *msg);
 int max(int x, int y);

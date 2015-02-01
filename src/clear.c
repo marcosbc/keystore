@@ -1,7 +1,5 @@
-#include <stdio.h>
 #include <sys/shm.h>
 #include <semaphore.h>
-#include <unistd.h>
 #include "common.h"
 #include "sems.h"
 

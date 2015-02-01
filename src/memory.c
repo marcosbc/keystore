@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <pthread.h>
 #include "common.h"
 #include "daemon.h"

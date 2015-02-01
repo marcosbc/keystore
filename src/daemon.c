@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <string.h>
 #include "common.h"
 #include "server.h"
 #include "daemon.h"

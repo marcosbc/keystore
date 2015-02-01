@@ -5,10 +5,10 @@
 #include "types.h"
 
 #define MSG_CONN_INCOMING "connection incoming\n"
-#define MSG_TIME_ELAPSED "connection closed after %.2f ms\n"
-#define MSG_RUNNING "database running...\n"
+#define MSG_REQUEST_TIME_ELAPSED "connection closed after %.3f msec\n"
+#define MSG_RUNNING "server running, took %.3f msec to start\n"
 #define MSG_STOPPING "stopping server...\n"
-#define MSG_STOPPED "server stopped\n"
+#define MSG_STOPPED "server stopped after running for %.3f sec\n"
 
 void store_stop();
 int store_write(char key[MAX_KEY_SIZE], char *val, int num_dbs,
