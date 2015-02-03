@@ -8,7 +8,6 @@
 #include "keystore.h"
 #include "client.h"
 #include "database.h"
-#include "sems.h"
 
 int store_set(char key[], char *value, int num_dbs, char *dbs[])
 {
@@ -37,13 +36,8 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	struct request *req = NULL;
 	struct request_info req_inf;
 
-	if(! sems_open())
-	{
-		print_perror("semopen");
-		error = ERR_SEMOPEN;
-	}
 	// get our server's public config information
-	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0644)))
 	{
 		print_perror("shmget");
 		error = ERR_SHMLOAD;
@@ -55,8 +49,6 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 	}
 	else
 	{
-		read_lock();
-
 		DEBUG_PRINT("getting values from shared memory\n");
 
 		// set our mode and other variables
@@ -73,10 +65,6 @@ int store_set(char key[], char *value, int num_dbs, char *dbs[])
 		req_inf.mode = store->modes[STORE_MODE_SET_ID];
 		req_inf.size = (max_key_len + strlen(value) + 1 + num_dbs * max_db_len)
 		               * sizeof(char) + sizeof(struct request);
-
-		// if we don't unlock before data is sent, the server and client
-		// will block (this is only critical in this mode)
-		read_unlock();
 	}
 
 	// initialize our socket
@@ -186,14 +174,8 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	struct request *req = NULL;
 	struct request_info req_inf;
 
-	// initialize our semaphores and begin the semaphore lock
-	if(! sems_open())
-	{
-		print_perror("semopen");
-		error = ERR_SEMOPEN;
-	}
 	// get our server's public config information
-	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0644)))
 	{
 		print_perror("shmget");
 		error = ERR_SHMLOAD;
@@ -205,8 +187,6 @@ int store_get(char key[], int num_dbs, char *dbs[])
 	}
 	else
 	{
-		read_lock();
-
 		// set our mode and other variables
 		max_db_len = store->max_db_len;
 		max_key_len = store->max_key_len;
@@ -222,8 +202,6 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		// the "1" comes from the size of the value, which is empty ("")
 		req_inf.size = (max_key_len + 1 + num_dbs * max_db_len)
 		               * sizeof(char) + sizeof(struct request);
-
-		read_unlock();
 	}
 
 	if(error == ERR_NONE)
@@ -339,13 +317,8 @@ int store_halt()
 	struct response_info res_inf; // response
 	struct request_info req_inf;
 
-	if(! sems_open())
-	{
-		print_perror("shmopen");
-		error = ERR_SEMOPEN;
-	}
 	// get our server's public config information
-	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0644)))
 	{
 		print_perror("shmget");
 		error = ERR_SHMLOAD;
@@ -357,8 +330,6 @@ int store_halt()
 	}
 	else
 	{
-		read_lock();
-		
 		// set sockaddr information values
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
@@ -368,8 +339,6 @@ int store_halt()
 		// set request info
 		req_inf.mode = store->modes[STORE_MODE_STOP_ID];
 		req_inf.size = 0;
-
-		read_unlock();
 	}
 	
 	DEBUG_PRINT("notice: database preparing to shut down\n");
