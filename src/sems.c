@@ -5,6 +5,7 @@
 
 sem_t *sem_mutex = NULL;
 sem_t *sem_rw = NULL;
+int num_rd = 0;
 
 int sems_init()
 {
@@ -18,7 +19,7 @@ int sems_init()
 
 	// create semaphores
 	sem_mutex = sem_open(SEM_MUTEX, O_CREAT, 0666, 1); // binary semaphore
-	sem_rw = sem_open(SEM_RW, O_CREAT, 0666, MAX_READERS_AT_ONCE);
+	sem_rw = sem_open(SEM_RW, O_CREAT, 0666, 1);
 
 	if(sem_mutex == (sem_t *) -1 || sem_rw == (sem_t *) -1)
 	{
@@ -88,56 +89,53 @@ int sems_close()
 
 void read_lock()
 {
-	DEBUG_PRINT("notice: read-lock: going for rw wait...\n");
+	DEBUG_PRINT("notice: read-lock: going for mutex wait...\n");
 
-	sem_wait(sem_rw);
-	
+	sem_wait(sem_mutex);
+
+	// first reader? block writing
+	if(++num_rd == 1)
+	{
+		DEBUG_PRINT("notice: read-lock: first reader, write wait...\n");
+
+		sem_wait(sem_rw);
+	}
+
+	sem_post(sem_mutex);
+
 	DEBUG_PRINT("notice: read-lock: done\n");
 }
 
 void read_unlock()
 {
-	DEBUG_PRINT("notice: read-unlock\n");
+	DEBUG_PRINT("notice: read-unlock: going for mutex wait...\n");
 
-	sem_post(sem_rw);
+	sem_wait(sem_mutex);
+
+	// last reader?
+	if(--num_rd == 0)
+	{
+		DEBUG_PRINT("notice: read-unlock: last reader, write post...\n");
+
+		// allow writing
+		sem_post(sem_rw);
+	}
+
+	sem_post(sem_mutex);
+
+	DEBUG_PRINT("notice: read-unlock: done");
 }
 
 void write_lock()
 {
-	int i;
+	DEBUG_PRINT("notice: write-lock\n");
 
-	DEBUG_PRINT("notice: write-lock: going for mutex wait\n");
-
-	// in case we have multiple writers
-	sem_wait(sem_mutex);
-	
-	DEBUG_PRINT("notice: write-lock: going for write wait...\n");
-			
-	for(i = 0; i < MAX_READERS_AT_ONCE; i++)
-	{
-		DEBUG_PRINT("notice: write-lock: iteration %d\n", i);
-		// we have a maximum number of readers
-		// but we want to be able to read simultaneously
-		sem_wait(sem_rw);
-	}
-
-	DEBUG_PRINT("notice: write-lock: going for mutex post...\n");
-
-	// we shouldn't have problems with multiple writers now
-	sem_post(sem_mutex);
-	
-	DEBUG_PRINT("notice: write-lock: done\n");
+	sem_wait(sem_rw);
 }
 
 void write_unlock()
 {
 	DEBUG_PRINT("notice: write-unlock\n");
-	
-	int i;
 
-	for(i = 0; i < MAX_READERS_AT_ONCE; i++)
-	{
-		// semaphore++
-		sem_post(sem_rw);
-	}
+	sem_post(sem_rw);
 }

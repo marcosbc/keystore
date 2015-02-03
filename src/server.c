@@ -407,6 +407,7 @@ int store_server_init()
 	key_t shm_key = ftok(".", KEY_ID);
 	store_db *dbs = NULL;
 	store_info *store = NULL; // shared memory to store public configuration
+	struct shmid_ds shmbuf; // for changing shm permissions
 
 	// socket related
 	int s = -1; // our socket id
@@ -430,14 +431,14 @@ int store_server_init()
 	DEBUG_PRINT("notice: database starting\n");
 
 	// why or? so we make sure there are no conflicts
-	if(-1 != (shmid = shmget(shm_key, sizeof(struct info), 0664))
+	if(-1 != (shmid = shmget(shm_key, sizeof(struct info), 0644))
 	   || (store_info *) -1 != (store = shmat(shmid, NULL, 0)))
 	{
 		error = ERR_SESSION;
 	}
 	// we shouldn't be able to initialize memory when it has already been done
 	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info),
-	                         IPC_CREAT | IPC_EXCL | 0664)))
+	                         IPC_CREAT | IPC_EXCL | 0600)))
 	{
 		error = ERR_SHMCREATE;
 		print_perror("shmget");
@@ -457,8 +458,6 @@ int store_server_init()
 		// init our start time
 		gettimeofday(&start, NULL);
 		DEBUG_PRINT("notice: request timer started\n");
-
-		write_lock();
 
 		// init our socket info, everything went ok
 		strcpy(store->sock_path, STORE_SOCKET_PATH);
@@ -486,14 +485,30 @@ int store_server_init()
 		store->modes[STORE_MODE_GET_ID] = STORE_MODE_GET;
 		store->modes[STORE_MODE_STOP_ID] = STORE_MODE_STOP;
 
-		write_unlock();
+		// get the current shared memory settings, to change permissions
+		if(-1 == shmctl(shmid, IPC_STAT, &shmbuf))
+		{
+			print_perror("shmctl: IPC_STAT");
+			error = ERR_SHMCTL;
+		}
+		else
+		{
+			// write permissions to server, read permissions to the rest
+			shmbuf.shm_perm.mode = 0644;
+		}
 	}
 
 	// if we were able to store the info successfully, proceed
 	if(error == ERR_NONE)
 	{
+		// add global read permissions to shared memory
+		if(-1 == shmctl(shmid, IPC_SET, &shmbuf))
+		{
+			print_perror("shmctl: IPC_SET");
+			error = ERR_SHMCTL;
+		}
 		// create our socket
-		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+		else if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
 			print_perror("socket");
 			error = ERR_SOCKET;
@@ -547,7 +562,7 @@ int store_server_init()
 	if(error != ERR_SESSION && error != ERR_SHMCREATE
 	   && -1 == shmctl(shmid, IPC_RMID, NULL))
 	{
-		print_perror("shmctl");
+		print_perror("shmctl: IPC_RMID");
 		error = ERR_SHMCTL;
 	}
 

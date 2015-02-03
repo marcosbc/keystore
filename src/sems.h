@@ -6,7 +6,6 @@
 
 // for shared memory RW (we want to be able to have multiple readers,
 // but block them only if we are writing)
-#define MAX_READERS_AT_ONCE 10
 #define ONE                 1
 #define SEM_MUTEX           "mutex"
 #define SEM_RW              "readwrite"
