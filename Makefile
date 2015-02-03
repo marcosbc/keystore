@@ -1,7 +1,7 @@
 SRCDIR = ./src
 BINDIR = ./bin
 
-all: create_bin keystore_clear_memory keystore keystored keystore_elapsed
+all: create_bin keystore keystored
 	cp $(SRCDIR)/daemon.sh $(BINDIR)/keystored
 	cp $(SRCDIR)/keystore.sh $(BINDIR)/keystore
 
