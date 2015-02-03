@@ -1,39 +1,47 @@
-#include <stdio.h>
 #include <stdarg.h> // va_list and related functions
+#include <sys/time.h>
 #include "common.h"
 
-void print_error_case(int error)
+void print_common_error_case(int error)
 {
 	switch(error)
 	{
+		// common errors between server and client
 		case ERR_ALLOC:
 			print_error(ERR_ALLOC_MSG);
 			break;
-		case ERR_STORE_SHMCREATE:
-			print_error(ERR_STORE_SHMCREATE_MSG);
+		case ERR_SOCKET:
+			print_error(ERR_SOCKET_MSG);
 			break;
-		case ERR_STORE_SHMLOAD:
-			print_error(ERR_STORE_SHMLOAD_MSG);
+		case ERR_SHMAT:
+			print_error(ERR_SHMAT_MSG);
 			break;
-		case ERR_STORE_SHMAT:
-			print_error(ERR_STORE_SHMAT_MSG);
+		case ERR_SHMDT:
+			print_error(ERR_SHMDT_MSG);
 			break;
-		case ERR_STORE_SHMDT:
-			print_error(ERR_STORE_SHMDT_MSG);
+		case ERR_SEMOPEN:
+			print_error(ERR_SEMOPEN_MSG);
 			break;
-		case ERR_STORE_SHMCTL:
-			print_error(ERR_STORE_SHMCTL_MSG);
+		case ERR_SEMCLOSE:
+			print_error(ERR_SEMCLOSE_MSG);
 			break;
-		case ERR_MEM_SEMOPEN:
-			print_error(ERR_MEM_SEMOPEN_MSG);
+		case ERR_INVALID_MODE:
+			print_error(ERR_INVALID_MODE_MSG);
 			break;
-		case ERR_MEM_SEMUNLINK:
-			print_error(ERR_MEM_SEMUNLINK_MSG);
-			break;
+
 		case ERR_NONE:
 		default:
 			break;
 	}
+}
+
+// return the time difference in milliseconds
+double time_diff(struct timeval start, struct timeval end)
+{
+	double start_time = (double) start.tv_sec * 1000000 + (double) start.tv_usec;
+	double end_time = (double) end.tv_sec * 1000000 + (double) end.tv_usec;
+
+	return (end_time - start_time) / 1000;
 }
 
 void print_error(const char *msg, ...)

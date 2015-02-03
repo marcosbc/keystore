@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <string.h>
 #include "common.h"
 #include "client.h"
 #include "keystore.h"
@@ -42,9 +40,8 @@ int main(int argc, char *argv[])
 	else
 	{
 		error_type = ERR_USE;
-		printf(ERR_USE_MSG, argv[0]);
+		fprintf(stderr, ERR_USE_MSG, argv[0]);
 	}
-
 	print_error_case(error_type);
 
 	return error_type;
@@ -81,4 +78,26 @@ int check_arguments(int num, char *args[], int *mode)
 	}
 
 	return ok;
+}
+
+void print_error_case(int error)
+{
+	switch(error)
+	{
+		case ERR_SHMLOAD:
+			print_error(ERR_SHMLOAD_MSG);
+			break;
+		case ERR_CONNECT:
+			print_error(ERR_CONNECT_MSG);
+			break;
+		case ERR_SIZE:
+			print_error(ERR_SIZE_MSG);
+			break;
+
+		default:
+			print_common_error_case(error);
+			break;
+		case ERR_NONE:
+			break;
+	}
 }

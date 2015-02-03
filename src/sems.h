@@ -14,7 +14,6 @@
 int sems_init();
 int sems_open();
 int sems_close();
-int sems_clear();
 void read_lock();
 void read_unlock();
 void write_lock();

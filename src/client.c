@@ -1,12 +1,11 @@
-#include <stdio.h>
 #include <sys/socket.h> // socket related things
 #include <sys/un.h> // socket related things
 #include <sys/stat.h> // mkfifo
 #include <sys/shm.h> // 
-#include <unistd.h>
 #include <fcntl.h> // O_CREAT, ...
 #include <pthread.h>
 #include "common.h"
+#include "keystore.h"
 #include "client.h"
 #include "database.h"
 #include "sems.h"
@@ -14,76 +13,66 @@
 int store_set(char key[], char *value, int num_dbs, char *dbs[])
 {
 	int error = ERR_NONE;
-	char mode = '\0';
-	int val_len = strlen(value);
-	char *dbs_corrected = NULL;
-	char *key_corrected = NULL;
 	int i;
-	int s = -1; // client socket
+
+	// for setting the variables easier in the request address
+	char *key_ptr = NULL;
+	char *val_ptr = NULL;
+	char *dbs_ptr = NULL;
+
+	// variables for communication via TCP
+	int s = -1;
 	struct sockaddr_un addr;
-	int len;
+	size_t addr_size = 0;
+
+	// shared memory and common settings
 	int shmid = -1;
 	store_info *store = NULL;
 	key_t shm_key = ftok(".", KEY_ID);
-	char *ack_msg = NULL; // stores the ack message
-	char *ack_buff = NULL; // stores the response
-	int max_db_len;
-	int max_key_len;
-	int ack_len;
+	int max_db_len = 0;
+	int max_key_len = 0;
+
+	// result and request
+	struct response_info res_inf; // response
+	struct request *req = NULL;
+	struct request_info req_inf;
 
 	if(! sems_open())
 	{
-		error = ERR_MEM_SEMOPEN;
+		print_perror("semopen");
+		error = ERR_SEMOPEN;
+	}
+	// get our server's public config information
+	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	{
+		print_perror("shmget");
+		error = ERR_SHMLOAD;
+	}
+	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
+	{
+		print_perror("shmat");
+		error = ERR_SHMAT;
 	}
 	else
 	{
 		read_lock();
-	}
 
-	// get our server's public config information
-	if(error == ERR_NONE &&
-	   -1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
-	{
-		error = ERR_STORE_SHMLOAD;
-	}
-	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
-	{
-		error = ERR_STORE_SHMAT;
-	}
-	else if(NULL == (ack_msg = (char *) malloc(store->ack_len * sizeof(char)))
-	     || NULL == (ack_buff = (char *) malloc(store->ack_len * sizeof(char))))
-	{
-		error = ERR_ALLOC;
-	}
-	else
-	{
-		DEBUG_PRINT("get first set of values from shm, store=%p\n", store);
+		DEBUG_PRINT("getting values from shared memory\n");
 
 		// set our mode and other variables
-		mode = store->modes[STORE_MODE_SET_ID];
-		DEBUG_PRINT("mode=%c\n", mode);
 		max_db_len = store->max_db_len;
-		DEBUG_PRINT("max_db_len=%d\n", max_db_len);
 		max_key_len = store->max_key_len;
-		DEBUG_PRINT("max_key_len=%d\n", max_key_len);
-		ack_len = store->ack_len;
-		DEBUG_PRINT("ack_len=%d\n", ack_len);
-		strcpy(ack_msg, store->ack_msg);
-		DEBUG_PRINT("ack_msg=%s\n", ack_msg);
-		
-		DEBUG_PRINT("get sock_path\n");
 
 		// set sockaddr information values
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
-		len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
+		addr_size = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
 
-		DEBUG_PRINT("got server config pid=%d, acklen=%d ackmsg=%s socklen=%d \
-sockpath=%s keylen=%d vallen=%d dblen=%d\n",
-					 (int) store->pid, store->ack_len, store->ack_msg,
-					 store->max_sock_len, store->sock_path, store->max_key_len,
-					 store->max_val_len, store->max_db_len);
+		// set request info
+		req_inf.mode = store->modes[STORE_MODE_SET_ID];
+		req_inf.size = (max_key_len + strlen(value) + 1 + num_dbs * max_db_len)
+		               * sizeof(char) + sizeof(struct request);
 
 		// if we don't unlock before data is sent, the server and client
 		// will block (this is only critical in this mode)
@@ -91,67 +80,60 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 	}
 
 	// initialize our socket
-	if(error == ERR_NONE && -1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(error == ERR_NONE)
 	{
-		error = ERR_SOCKETCREATE;
-	}
-	// connect to socket
-	else if(connect(s, (struct sockaddr *) &addr, len) == -1)
-	{
-		print_perror("connect");
-		error = ERR_CONNECT;
-	}
-	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * max_db_len,
-	                                                 sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) calloc(max_key_len,
-	                                                 sizeof(char)))))
-	{
-		error = ERR_ALLOC;
-		print_perror("calloc");
-	}
-	else
-	{
-		// correct key and dbs variable's size
-		strncpy(key_corrected, key, max_key_len - 1);
-		key_corrected[max_key_len - 1] = '\0';
-
-		for(i = 0; i < num_dbs; i++)
+		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			strncpy(dbs_corrected + i * max_db_len, dbs[i],
-			        max_db_len- 1);
-			*(dbs_corrected + (i + 1) * max_db_len - 1) = '\0';
+			print_perror("socket");
+			error = ERR_SOCKET;
 		}
+		// connect to socket
+		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
+		{
+			print_perror("connect");
+			error = ERR_CONNECT;
+		}
+		else if(NULL == (req = (struct request *) malloc(req_inf.size)))
+		{
+			print_perror("malloc");
+			error = ERR_ALLOC;
+		}
+		else
+		{
+			DEBUG_PRINT("notice: preparing for setting\n");
 
-		// send the data
-		DEBUG_PRINT("writing mode '%c' to server\n", mode);
-		write(s, &mode, sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
-		write(s, key_corrected, max_key_len * sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
-		write(s, &num_dbs, sizeof(int));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
-		write(s, dbs_corrected, num_dbs * max_db_len * sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing val_len '%d' to server\n", val_len);
-		write(s, &val_len, sizeof(int));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing value '%s' to server\n", value);
-		write(s, value, val_len * sizeof(char));
-		
-		DEBUG_PRINT("writing finished\n");
-		
-		// read the result (in this case it's another ack)
-		// we can't read a recvd address since it would give segm error
+			// init request data
+			req->val_size = strlen(value) + 1;
+			req->num_dbs = num_dbs;
 
-		DEBUG_PRINT("---DONE---\n\n");
+			// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
+			key_ptr = (char *) (req + 1);
+			val_ptr = (char *) (key_ptr + max_key_len);
+			dbs_ptr = (char *) (val_ptr + req->val_size);
+
+			// correct key
+			strncpy(key_ptr, key, max_key_len - 1);
+			key_ptr[max_key_len - 1] = '\0';
+
+			// copy the value (we already have reserved for the needed length)
+			strcpy(val_ptr, value);
+
+			// copy dbs and correct
+			for(i = 0; i < num_dbs; i++)
+			{
+				strncpy(dbs_ptr + i * max_db_len, dbs[i],
+				        max_db_len - 1);
+				*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
+			}
+
+			// communicate with the server
+			error = store_act(s, &req_inf, &req, &res_inf, NULL);
+
+			if(error == ERR_NONE && res_inf.size > 0)
+			{
+				error = ERR_SIZE;
+			}
+		}
 	}
 
 	if(s >= 0)
@@ -160,15 +142,14 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 		close(s);
 	}
 
-	if(error != ERR_STORE_SHMLOAD && error != ERR_STORE_SHMAT
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT && error != ERR_SEMOPEN
 	   && -1 == shmdt(store))
 	{
-		error = ERR_STORE_SHMDT;
+		print_perror("shmdt");
+		error = ERR_SHMDT;
 	}
 
-	free(ack_buff);
-	free(dbs_corrected);
-	free(key_corrected);
+	free(req);
 
 	return error;
 }
@@ -176,165 +157,149 @@ sockpath=%s keylen=%d vallen=%d dblen=%d\n",
 int store_get(char key[], int num_dbs, char *dbs[])
 {
 	int error = ERR_NONE;
-	char mode = '\0';
-	char *dbs_corrected = NULL;
-	char *key_corrected = NULL;
 	int i = 0;
+
+	// for setting the variables easier in the request address
+	char *key_ptr = NULL;
+	char *val_ptr = NULL;
+	char *dbs_ptr = NULL;
+
+	// array of value-sizes and result value for the response
+	int *res_size_ptr = NULL;
+	char *res_val_ptr = NULL;
+
+	// variables for communication via TCP
 	int s = -1; // client socket
 	struct sockaddr_un addr;
-	int len;
-	int val_len;
-	char *val = NULL;
-	int shmid = -1;
+	size_t addr_size = 0;
+
+	// shared memory, common settings variables
 	store_info *store = NULL;
 	key_t shm_key = ftok(".", KEY_ID);
-	char *ack_msg = NULL;
-	char *ack_buff = NULL;
+	int shmid = -1;
 	int max_db_len;
 	int max_key_len;
-	int ack_len;
 
+	// response and request
+	struct response *res = NULL;
+	struct response_info res_inf; // response
+	struct request *req = NULL;
+	struct request_info req_inf;
+
+	// initialize our semaphores and begin the semaphore lock
 	if(! sems_open())
 	{
-		error = ERR_MEM_SEMOPEN;
+		print_perror("semopen");
+		error = ERR_SEMOPEN;
+	}
+	// get our server's public config information
+	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	{
+		print_perror("shmget");
+		error = ERR_SHMLOAD;
+	}
+	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
+	{
+		print_perror("shmat");
+		error = ERR_SHMAT;
 	}
 	else
 	{
 		read_lock();
-	}
 
-	// get our server's public config information
-	if(error == ERR_NONE &&
-	   -1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
-	{
-		error = ERR_STORE_SHMLOAD;
-	}
-	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
-	{
-		error = ERR_STORE_SHMAT;
-	}
-	else if(NULL == (ack_msg = (char *) malloc(store->ack_len * sizeof(char)))
-	     || NULL == (ack_buff = (char *) malloc(store->ack_len * sizeof(char))))
-	{
-		error = ERR_ALLOC;
-	}
-	else
-	{
 		// set our mode and other variables
-		mode = store->modes[STORE_MODE_GET_ID];
 		max_db_len = store->max_db_len;
 		max_key_len = store->max_key_len;
-		ack_len = store->ack_len;
-		strcpy(ack_msg, store->ack_msg);
 
 		// set sockaddr information values
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
-		len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
-		
+		addr_size = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
+
+		// set request info
+		req_inf.mode = store->modes[STORE_MODE_GET_ID];
+		// the "1" comes from the size of the value, which is empty ("")
+		req_inf.size = (max_key_len + 1 + num_dbs * max_db_len)
+		               * sizeof(char) + sizeof(struct request);
+
 		read_unlock();
 	}
 
-	// initialize our socket
-	if(error == ERR_NONE && -1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(error == ERR_NONE)
 	{
-		DEBUG_PRINT("error at socket creation\n");
-		error = ERR_SOCKETCREATE;
-	}
-	// connect to socket
-	else if(connect(s, (struct sockaddr *) &addr, len) == -1)
-	{
-		print_perror("connect");
-		error = ERR_CONNECT;
-	}
-	else if(NULL == (dbs_corrected = (char *) calloc(num_dbs * max_db_len,
-	                                                 sizeof(char))) ||
-	       (NULL == (key_corrected = (char *) calloc(max_key_len,
-	                                                 sizeof(char)))))
-	{
-		error = ERR_ALLOC;
-		print_perror("calloc");
-	}
-	else
-	{
-		DEBUG_PRINT("copy key and dbs\n");
-
-		// correct key and dbs variable's size
-		strncpy(key_corrected, key, max_key_len - 1);
-		key_corrected[max_key_len - 1] = '\0';
-
-		// we will be using single pointers instead of tables to copy db
-		for(i = 0; i < num_dbs; i++)
+		// initialize our socket
+		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
 		{
-			strncpy(dbs_corrected + i * max_db_len, dbs[i],
-			        max_db_len - 1);
-			*(dbs_corrected + (i + 1) * max_db_len - 1) = '\0';
-			DEBUG_PRINT("got db \"%s\"\n",
-			            dbs_corrected + i * max_db_len);
+			print_perror("socket");
+			error = ERR_SOCKET;
+		}
+		// connect to socket
+		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
+		{
+			print_perror("connect");
+			error = ERR_CONNECT;
+		}
+		else if(NULL == (req = (struct request *) malloc(req_inf.size)))
+		{
+			print_perror("malloc");
+			error = ERR_ALLOC;
+		}
+		else
+		{
+			DEBUG_PRINT("notice: preparing for getting\n");
+
+			// init request data
+			req->val_size = 1; // strlen("") + 1
+			req->num_dbs = num_dbs;
+
+			// CHECK, MAYBE WRONG SINCE SHOULD BE req+1....???
+			key_ptr = (char *) (req + 1);
+			val_ptr = (char *) (key_ptr + max_key_len);
+			dbs_ptr = (char *) (val_ptr + req->val_size);
+
+			// correct key
+			strncpy(key_ptr, key, max_key_len - 1);
+			key_ptr[max_key_len - 1] = '\0';
+
+			// set our value as an empty string
+			*val_ptr = '\0';
+
+			// copy dbs and correct
+			for(i = 0; i < num_dbs; i++)
+			{
+				strncpy(dbs_ptr + i * max_db_len, dbs[i],
+				        max_db_len - 1);
+				*(dbs_ptr + (i + 1) * max_db_len - 1) = '\0';
+			}
+
+			// communicate with the server
+			error = store_act(s, &req_inf, &req, &res_inf, &res);
+
+			// can never be less than zero, but just in case we change types
+			if(error == ERR_NONE && res_inf.size <= 0)
+			{
+				error = ERR_SIZE;
+			}
+		}
+	}
+
+	// is the response correct?
+	if(error == ERR_NONE)
+	{
+		// calculate pointers
+		res_size_ptr = (int *) (res + 1);
+		res_val_ptr = (char *) (res_size_ptr + res->num);
+
+		// now we checked everything is ok, print result
+		for(i = 0; i < res->num; i++)
+		{
+			// print result
+			printf(MSG_ENTRY, dbs_ptr + i * max_db_len, key, res_val_ptr);
+			res_val_ptr += *res_size_ptr;
+			res_size_ptr++;
 		}
 
-		DEBUG_PRINT("writing to socket\n");
-
-		// send the data
-		DEBUG_PRINT("writing mode '%c' to server\n", mode);
-		write(s, &mode, sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing key '%s' to server\n", key_corrected);
-		write(s, key_corrected, max_key_len * sizeof(char));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing num_dbs '%d' to server\n", num_dbs);
-		write(s, &num_dbs, sizeof(int));
-		read(s, ack_buff, ack_len);
-		DEBUG_PRINT("ack \"%s\" read\n", ack_buff);
-		DEBUG_PRINT("writing dbs[0] '%s' to server\n", dbs_corrected);
-		write(s, dbs_corrected, num_dbs * max_db_len * sizeof(char));
-
-		DEBUG_PRINT("writing finished\n");
-		
-		for(i = 0; i < num_dbs && error == ERR_NONE; i++)
-		{
-			DEBUG_PRINT("\nREAD ITERATION %d\n", i);
-
-			// read the value result
-			// we can't read the address because it's not shared and it would
-			// give a segfault error
-			// for(i = 0; i < num_dbs; i++) entries[i];...
-			read(s, &val_len, sizeof(int));
-			DEBUG_PRINT("val_len \"%d\" read\n", val_len);
-			write(s, ack_msg, ack_len);
-			DEBUG_PRINT("ack written\n");
-			
-			DEBUG_PRINT("current value pointer before calloc for %d bytes: %p\n",
-			            (val_len + 1) * ((int) sizeof(char)), val);
-			val = (char *) calloc((val_len + 1), sizeof(char));
-			DEBUG_PRINT("finished calloc\n");
-			DEBUG_PRINT("value pointer after calloc: %p\n", val);
-
-			// memory alloc
-			if(NULL != val)
-			{
-				DEBUG_PRINT("reading value\n");
-				read(s, val, (val_len + 1) * sizeof(char));
-				DEBUG_PRINT("val \"%s\" read\n", val);
-				write(s, ack_msg, ack_len);
-				DEBUG_PRINT("ack written\n");
-	
-				printf("%s: %s=%s\n", dbs_corrected + i * max_db_len,
-				       key_corrected, val);
-				DEBUG_PRINT("---DONE---\n");
-			}
-			else
-			{
-				print_perror("calloc");
-				error = ERR_ALLOC;
-			}
-			free(val);
-			val = NULL;
-			val_len = 0;
-		}
 	}
 
 	if(s >= 0)
@@ -343,15 +308,15 @@ int store_get(char key[], int num_dbs, char *dbs[])
 		close(s);
 	}
 
-	if(error != ERR_STORE_SHMLOAD && error != ERR_STORE_SHMAT
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT && error != ERR_SEMOPEN
 	   && -1 == shmdt(store))
 	{
-		error = ERR_STORE_SHMDT;
+		print_perror("shmdt");
+		error = ERR_SHMDT;
 	}
 
-	free(ack_buff);
-	free(dbs_corrected);
-	free(key_corrected);
+	free(req);
+	free(res);
 	
 	return error;
 }
@@ -359,63 +324,80 @@ int store_get(char key[], int num_dbs, char *dbs[])
 int store_halt()
 {
 	int error = ERR_NONE;
-	char mode = '\0';
-	int len;
+
+	// variables for communication via TCP
 	int s = -1; // client socket
 	struct sockaddr_un addr;
+	size_t addr_size = 0;
+
+	// shared memory and common settings (in this case, only socket path)
 	int shmid = -1;
 	key_t shm_key = ftok(".", KEY_ID);
 	store_info *store = NULL;
 
+	// result and request `headers'
+	struct response_info res_inf; // response
+	struct request_info req_inf;
+
 	if(! sems_open())
 	{
-		error = ERR_MEM_SEMOPEN;
+		print_perror("shmopen");
+		error = ERR_SEMOPEN;
 	}
 	// get our server's public config information
-	else if(error == ERR_NONE &&
-	        -1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
+	else if(-1 == (shmid = shmget(shm_key, sizeof(struct info), 0664)))
 	{
-		error = ERR_STORE_SHMLOAD;
+		print_perror("shmget");
+		error = ERR_SHMLOAD;
 	}
 	else if((store_info *) -1 == (store = shmat(shmid, NULL, 0)))
 	{
-		error = ERR_STORE_SHMAT;
+		print_perror("shmat");
+		error = ERR_SHMAT;
 	}
 	else
 	{
 		read_lock();
 		
-		// set our mode
-		mode = store->modes[STORE_MODE_STOP_ID];
-
 		// set sockaddr information values
 		memset(&addr, 0, sizeof(addr));
 		addr.sun_family = AF_UNIX;
 		strcpy(addr.sun_path, store->sock_path);
-		len = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
-		
+		addr_size = sizeof(addr.sun_family) + (strlen(addr.sun_path) + 1);
+
+		// set request info
+		req_inf.mode = store->modes[STORE_MODE_STOP_ID];
+		req_inf.size = 0;
+
 		read_unlock();
 	}
 	
 	DEBUG_PRINT("notice: database preparing to shut down\n");
 
 	// initialize our socket
-	if(error == ERR_NONE && -1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+	if(error == ERR_NONE)
 	{
-		error = ERR_SOCKETCREATE;
-	}
-	// connect to socket
-	else if(connect(s, (struct sockaddr *) &addr, len) == -1)
-	{
-		print_perror("connect");
-		error = ERR_CONNECT;
-	}
-	else
-	{
-		// send halt character to daemon (for shutdown)
-		write(s, &mode, sizeof(char));
+		if(-1 >= (s = socket(AF_UNIX, SOCK_STREAM, 0)))
+		{
+			print_perror("socket");
+			error = ERR_SOCKET;
+		}
+		// connect to socket
+		else if(-1 == connect(s, (struct sockaddr *) &addr, addr_size))
+		{
+			print_perror("connect");
+			error = ERR_CONNECT;
+		}
+		else
+		{
+			error = store_act(s, &req_inf, NULL, &res_inf, NULL);
 
-		DEBUG_PRINT("notice: database shutting down\n");
+			// does the size make sense?
+			if(error == ERR_NONE && res_inf.size > 0)
+			{
+				error = ERR_SIZE;
+			}
+		}
 	}
 
 	if(s >= 0)
@@ -423,6 +405,70 @@ int store_halt()
 		// close and unlink our socket
 		close(s);
 	}
+
+	if(error != ERR_SHMLOAD && error != ERR_SHMAT && error != ERR_SEMOPEN
+	   && -1 == shmdt(store))
+	{
+		print_perror("shmdt");
+		error = ERR_SHMDT;
+	}
+
+	return error;
+}
+
+// save request and send data
+int store_act(int s, struct request_info *req_inf, struct request **req,
+              struct response_info *res_inf, struct response **res)
+{
+	int error = ERR_NONE;
+
+	// send the data
+	DEBUG_PRINT("notice: sending request\n");
+	write(s, req_inf, sizeof(struct request_info));
+
+	// only send data if there is something to send
+	if(req != NULL && req_inf->size > 0)
+	{
+		DEBUG_PRINT("notice: sending request data (%dB)\n", (int) req_inf->size);
+		write(s, *req, req_inf->size);
+	}
+
+	// read the result
+	DEBUG_PRINT("notice: getting response\n");
+	read(s, res_inf, sizeof(struct response_info));
+
+	if(res_inf->error != ERR_NONE)
+	{
+		DEBUG_PRINT("notice: no response data to receive\n");
+		error = res_inf->error;
+		// we should add a checksum to check if data is ok
+	}
+	// only continue if we have something to receive
+	else if(res_inf->size > 0)
+	{
+		DEBUG_PRINT("notice: getting response data (%dB)\n", (int) res_inf->size);
+		if(NULL == (*res = (struct response *) malloc(res_inf->size)))
+		{
+			print_perror("malloc");
+			error = ERR_ALLOC;
+		}
+		else
+		{
+			read(s, *res, res_inf->size);
+		}
+	}
+
+	#ifdef __DEBUG__
+	if(error == ERR_NONE)
+	{
+		DEBUG_PRINT("notice: *** DONE ***\n\n");
+	}
+	else
+	{
+		DEBUG_PRINT("notice: something went wrong on the server side");
+		DEBUG_PRINT("notice: *** NOT DONE, ERROR HAPPENED ***\n");
+	}
+	#endif
 
 	return error;
 }

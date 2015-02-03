@@ -16,7 +16,7 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 	}
 
 	// now create it
-	*iterator = (store_db *) calloc(1, sizeof(store_db));
+	*iterator = (store_db *) malloc(sizeof(store_db));
 
 	if(*iterator != NULL)
 	{
@@ -24,7 +24,7 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 		(*iterator)->ent = NULL;
 		(*iterator)->next = NULL;
 		
-		DEBUG_PRINT("created db %s at %p, prev is %p\n", name, *iterator, prev);
+		DEBUG_PRINT("created db %s: %p, prev: %p\n", name, *iterator, prev);
 
 		// add basic fields
 		if(prev != NULL)
@@ -36,11 +36,23 @@ store_db *create_db(char name[MAX_DB_SIZE], store_db **dbs)
 	return *iterator;
 }
 
-store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
+store_db *locate_db(char *name, store_db *db)
+{
+	store_db *iterator = db;
+
+	while(iterator != NULL && 0 != strncmp(name, iterator->name, MAX_DB_SIZE))
+	{
+		iterator = iterator->next;
+	}
+
+	return iterator;
+}
+
+store_entry *create_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
 	store_entry *entry = NULL;
-	store_entry **iterator = &((*db)->ent); // only specific db entries
-	store_entry **complete_iterator = &((*db)->ent); // all entries
+	store_entry **iterator = &(db->ent); // only specific db entries
+	store_entry **complete_iterator = &(db->ent); // all entries
 
 	while(*complete_iterator != NULL)
 	{
@@ -53,12 +65,12 @@ store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
 		iterator = &((*iterator)->brother);
 	}
 
-	entry = (store_entry *) calloc(1, sizeof(store_entry));
-	DEBUG_PRINT("alloc: %p\n", entry);
+	entry = (store_entry *) malloc(sizeof(store_entry));
 	
 	if(entry != NULL)
 	{
-		DEBUG_PRINT("setting value for entry\n");
+		DEBUG_PRINT("setting value for entry %p\n", entry);
+
 		// add basic fields
 		*iterator = entry;
 		*complete_iterator = entry;
@@ -66,40 +78,51 @@ store_entry *create_entry(char key[MAX_KEY_SIZE], store_db **db)
 		entry->val = NULL;
 		entry->next = NULL;
 		entry->brother = NULL;
-		DEBUG_PRINT("values set for entry\n");
 	}
 	
 	return entry;
 }
 
-// locate an entry in the database, IT DOES NOT WORK OK
+// locate an entry in the database
 store_entry *locate_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
-	DEBUG_PRINT("locating entry\n");
+	DEBUG_PRINT("notice: locating entry\n");
 	store_entry *iterator = db->ent;
 
 	// find our collection
 	while(iterator != NULL && 0 != strcmp(key, iterator->key))
 	{
-		DEBUG_PRINT("current: %s=%s, brother=%p\n", iterator->key, iterator->val,
-		            iterator->brother);
 		iterator = iterator->brother;
 	}
 
 	return iterator;
 }
 
-// db? DOES IT WORK?
-store_db *locate_db(char *name, store_db *db)
+// delete an entry in the database, don't give error if it fails
+void delete_entry(char key[MAX_KEY_SIZE], store_db *db)
 {
-	store_db *iterator = db;
+	DEBUG_PRINT("notice: deleting entry\n");
+	store_entry **iterator = &(db->ent);
+	store_entry *aux = NULL;
 
-	while(iterator != NULL && 0 != strncmp(name, iterator->name, MAX_DB_SIZE))
+	// find our collection
+	while(*iterator != NULL && 0 != strcmp(key, (*iterator)->key))
 	{
-		iterator = iterator->next;
+		iterator = &((*iterator)->brother);
 	}
 
-	return iterator;
+	if(*iterator != NULL)
+	{
+		DEBUG_PRINT("notice: %s: entry found for deletion\n", db->name);
+
+		// set auxiliary ptr, and link previous to next element
+		aux = *iterator;
+		*iterator = (*iterator)->brother;
+
+		// free the value and the iterator itself
+		free(aux->val);
+		free(aux);
+	}
 }
 
 #ifdef __DEBUG__

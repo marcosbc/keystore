@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include <pthread.h>
 #include "common.h"
+#include "daemon.h"
 #include "types.h"
 #include "sems.h"
 #include "memory.h"
@@ -18,8 +18,9 @@ int memory_init()
 
 void *memory_set(void *info)
 {
-	DEBUG_PRINT("in memory_set\n");
+	DEBUG_PRINT("notice: memory_set\n");
 	int val_len = 0;
+	int val_differs = 1; // if the values are the same
 	store_entry *entry = NULL;
 	store_db *db = NULL;
 
@@ -30,88 +31,93 @@ void *memory_set(void *info)
 	store_db **dbs = ((struct entry_inf *) info)->dbs;
 	int *error = &(((struct entry_inf *) info)->error);
 
-	DEBUG_PRINT("got values: key=%s value=%s db_name=%s dbs=%p error=%d\n",
-	            key, value, db_name, *dbs, *error);
-
 	// we shouldn't write while reading/writing
 	write_lock();
 	
-	DEBUG_PRINT("finding db\n");
 	// locate our db and find our entry
 	db = locate_db(db_name, *dbs);
 
-	DEBUG_PRINT("db found?\n");
 	// create our db if it doesn't exist
 	if(db == NULL)
 	{
-		DEBUG_PRINT("*** creating db with name \"%s\", dbs=%p\n",
-		            db_name, dbs);
+		DEBUG_PRINT("notice: db \"%s\" %p not found, creating...\n", db_name, dbs);
 		db = create_db(db_name, dbs);
-		DEBUG_PRINT("created db %p\n", db);
 	}
 
 	// error allocating data while creating the db?
 	if(db == NULL)
 	{
-		DEBUG_PRINT("error allocating for db \n");
+		perror("create_db");
 		*error = ERR_ALLOC;
+	}
+	// are we unsetting an entry?
+	else if(value[0] == '\0')
+	{
+		// we don't wan't to give any error if entry was not found
+		delete_entry(key, db);
 	}
 	else
 	{
-		DEBUG_PRINT("finding entry\n");
-
 		entry = locate_entry(key, db);
-		DEBUG_PRINT("entry found?\n");
+
+		// no value size limit?
+		if(MAX_VAL_SIZE <= 0)
+		{
+			val_len = strlen(value) + 1;
+		}
+		// if we have set a value limit, apply it
+		else
+		{
+			val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
+		}
 
 		// did we find an entry?
 		if(entry != NULL)
 		{
-			// yes, so free the previous one
-			DEBUG_PRINT("yes, free val %p\n", entry->val);
-			free(entry->val);
-			entry->val = NULL;
+			if(0 == strncmp(value, entry->val, val_len))
+			{
+				DEBUG_PRINT("notice: %s: values are equal\n", db_name);
+				val_differs = 0;
+			}
+			else
+			{
+				// if the value has changed, free the previous one
+				free(entry->val);
+				entry->val = NULL;
+			}
 		}
 		// if we didn't, create a new one
 		else
 		{
-			DEBUG_PRINT("no, creat\n");
-
-			entry = create_entry(key, &db);
-			DEBUG_PRINT("created\n");
-
+			entry = create_entry(key, db);
 
 			if(entry == NULL)
 			{
+				print_perror("create_entry");
 				*error = ERR_ALLOC;
 			}
 		}
 
 		if(*error == ERR_NONE)
 		{
-			// if we have set a value limit, apply it
-			if(MAX_VAL_SIZE <= 0)
+			// reserve space for our value as long as it was not the same
+			if(val_differs)
 			{
-				val_len = strlen(value) + 1;
-			}
-			else
-			{
-				val_len = (size_t) min((int) strlen(value) + 1, MAX_VAL_SIZE);
-			}
-			DEBUG_PRINT("reserving val %s, len %d\n", value, val_len);
-			entry->val = (char *) calloc(val_len, sizeof(char));
+				entry->val = (char *) malloc(val_len * sizeof(char));
 				
-			if(entry->val == NULL)
-			{
-				*error = ERR_ALLOC;
+				if(entry->val == NULL)
+				{
+					print_perror("malloc");
+					*error = ERR_ALLOC;
+				}
+				else
+				{
+					strncpy(entry->val, value, val_len);
+					entry->val[val_len - 1] = '\0';
+				}
 			}
-			DEBUG_PRINT("have entry now, adding value (MAX_LEN=%d)\n",
-			            MAX_VAL_SIZE);
-			
-			strncpy(entry->val, value, val_len);
-			entry->val[val_len - 1] = '\0';
 
-			DEBUG_PRINT("notice: [child, memory] setting in db \"%s\" key \
-\"%s\", value \"%s\" and val_len \"%d\" is DONE\n",
+			DEBUG_PRINT("notice: \"%s\": setting \"%s\"=\"%s\" (\"%d\"B) DONE\n",
 			            db_name, entry->key, entry->val, val_len);
 
 			// save the entry to our info variable (as output)
@@ -119,16 +125,6 @@ void *memory_set(void *info)
 
 			#ifdef __DEBUG__
 			print_store_tree(dbs);
-
-			if(entry != NULL)
-			{
-				DEBUG_PRINT("\n\nhas entry: %p with %s=%s\n", entry,
-				            entry->key, entry->val);
-			}
-			else
-			{
-				DEBUG_PRINT("\n\nwe *DONT* have an entry, NULL: %p\n", entry);
-			}
 			#endif
 		}
 	}
@@ -136,13 +132,13 @@ void *memory_set(void *info)
 	// done!
 	write_unlock();
 	
-	DEBUG_PRINT("returning thread error %d\n", *error);
+	DEBUG_PRINT("notice: memory_set returning thread error %d\n", *error);
 	pthread_exit(NULL);
 }
 
 void *memory_get(void *info)
 {
-	DEBUG_PRINT("in memory_get\n");
+	DEBUG_PRINT("notice: memory_get\n");
 	store_entry *ent = NULL;
 
 	// extract information from our info variable
@@ -156,7 +152,7 @@ void *memory_get(void *info)
 	// we have a limit of max readers at once
 	read_lock();
 
-	DEBUG_PRINT("locating db %s in dbs %p\n", db_name, dbs);
+	DEBUG_PRINT("notice: locating db %s in dbs %p\n", db_name, dbs);
 
 	// locate our db and find our entry
 	if(NULL == (db = locate_db(db_name, dbs)))
@@ -167,25 +163,22 @@ void *memory_get(void *info)
 	{
 		*error = ERR_ENTRY;
 	}
-	else if(NULL == (value = (char *) calloc((strlen(ent->val) + 1),
-	                                         sizeof(char))))
+	else if(NULL == (value = (char *) malloc((strlen(ent->val) + 1)
+	                                         * sizeof(char))))
 	{
+		print_perror("malloc");
 		*error = ERR_ALLOC;
 	}
 	else
 	{
-		DEBUG_PRINT("notice: [child, memory] getting from db \"%s\" key \
-\"%s\"\n",
-		            db->name,
-		    		((store_entry *) ent)->key);
+		DEBUG_PRINT("notice: getting from db \"%s\" key \"%s\"\n",
+		            db->name, ((store_entry *) ent)->key);
 
 		// get the value from the db
 		// write semaphore not needed because the entry_info is not shared
 		strcpy(value, ent->val);
 
-		DEBUG_PRINT("notice: [child, memory] got value \"%s\" for key \
-\"%s\" in db \"%s\"\n",
-		            value, key, db_name);
+		DEBUG_PRINT("notice: %s: got \"%s\"=\"%s\"\n", db_name, key, value);
 		
 		// save the entry and value to our info variable (as output)
 		((struct entry_inf *) info)->entry = ent;
@@ -196,12 +189,13 @@ void *memory_get(void *info)
 
 		if(ent != NULL)
 		{
-			DEBUG_PRINT("\n\nhas entry: %p with %s=%s\n", ent,
-			            ent->key, ent->val);
+			DEBUG_PRINT("\nnotice: %s: got entry %p \"%s\"=\"%s\"\n\n",
+			            db_name, ent, ent->key, ent->val);
 		}
 		else
 		{
-			DEBUG_PRINT("\n\nwe *DONT* have an entry, NULL: %p\n", ent);
+			DEBUG_PRINT("\nnotice: %s: entry \"%s\" *NOT FOUND* \n\n",
+			            db_name, key);
 		}
 		#endif
 	}
@@ -209,7 +203,7 @@ void *memory_get(void *info)
 	// reading done!
 	read_unlock();
 	
-	DEBUG_PRINT("returning thread error %d\n", *error);
+	DEBUG_PRINT("notice: memory_get returning thread error %d\n", *error);
 	pthread_exit(NULL);
 }
 
@@ -217,19 +211,41 @@ int memory_clear(store_db **dbs)
 {
 	int error = ERR_NONE;
 
+	// first, clear databases and entries
 	free_tree(dbs);
-	error = sems_clear();
+	
+	DEBUG_PRINT("notice: unlinking semaphores\n");
+	if(! sems_close())
+	{
+		error = ERR_SEMCLOSE;
+		perror("sem_unlink");
+	}
+
+	if(-1 == sem_unlink(SEM_MUTEX))
+	{
+		error = ERR_SEMUNLINK;
+		print_error("couldn't unlink semaphore \"%s\"", SEM_RW);
+		perror("sem_unlink");
+	}
+
+	if(-1 == sem_unlink(SEM_RW))
+	{
+		error = ERR_SEMUNLINK;
+		print_error("couldn't unlink semaphore \"%s\"", SEM_MUTEX);
+		perror("sem_unlink");
+	}
 
 	return error;
 }
 
-int free_tree(store_db **dbs)
+void free_tree(store_db **dbs)
 {
-	int success = 0;
+	DEBUG_PRINT("notice: freeing the tree of databases and entries\n");
+
 	store_db *prev_db = NULL;
 	store_db *iterator = NULL;
 	store_entry *entry = NULL;
-	store_entry *prev = NULL;
+	store_entry *prev = NULL; // previous entry
 
 	write_lock();
 	iterator = *dbs;
@@ -237,32 +253,30 @@ int free_tree(store_db **dbs)
 	// see what our dbs contains now
 	while(iterator != NULL)
 	{
-		DEBUG_PRINT("current db: %p, next: %p\n", iterator, iterator->next);
 		entry = iterator->ent;
 		while(entry != NULL)
 		{
 			// free it's value
-			DEBUG_PRINT("free val %p\n", entry->val);
+			DEBUG_PRINT("notice: freeing val %p\n", entry->val);
 			free(entry->val);
 			prev = entry;
 			entry = entry->next;
 		
 			// go to the next one
-			DEBUG_PRINT("free entry %p\n", prev);
+			DEBUG_PRINT("notice: freeing entry %p\n", prev);
 			free(prev);
 		}
 
-		DEBUG_PRINT("current db: %p, next: %p\n", iterator, iterator->next);
+		// jump to next element
 		prev_db = iterator;
 		iterator = iterator->next;
-		DEBUG_PRINT("free db %p, next is %p\n", prev_db, iterator);
+
+		DEBUG_PRINT("notice: freeing db: %p, next: %p\n", prev_db, iterator);
+
+		// free previous element
 		free(prev_db);
-		prev_db = NULL;
 	}
 
 	*dbs = NULL;
 	write_unlock();
-	success = 1;
-	
-	return success;
 }

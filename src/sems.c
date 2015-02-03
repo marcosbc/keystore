@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <semaphore.h>
 #include <fcntl.h> // O_CREAT, ...
 #include "common.h"
@@ -87,47 +86,18 @@ int sems_close()
 	return ok;
 }
 
-int sems_clear()
-{
-	int error = ERR_NONE;
-	
-	DEBUG_PRINT("notice: unlinking semaphores\n");
-
-	if(! sems_close())
-	{
-		error = ERR_MEM_SEMCLOSE;
-		perror("sem_unlink");
-	}
-
-	if(-1 == sem_unlink(SEM_MUTEX))
-	{
-		error = ERR_MEM_SEMUNLINK;
-		print_error("couldn't unlink semaphore \"%s\"", SEM_RW);
-		perror("sem_unlink");
-	}
-
-	if(-1 == sem_unlink(SEM_RW))
-	{
-		error = ERR_MEM_SEMUNLINK;
-		print_error("couldn't unlink semaphore \"%s\"", SEM_MUTEX);
-		perror("sem_unlink");
-	}
-
-	return error;
-}
-
 void read_lock()
 {
-	DEBUG_PRINT("readlock: going for rw wait...\n");
+	DEBUG_PRINT("notice: read-lock: going for rw wait...\n");
 
 	sem_wait(sem_rw);
 	
-	DEBUG_PRINT("readlock: done\n");
+	DEBUG_PRINT("notice: read-lock: done\n");
 }
 
 void read_unlock()
 {
-	DEBUG_PRINT("readunlock\n");
+	DEBUG_PRINT("notice: read-unlock\n");
 
 	sem_post(sem_rw);
 }
@@ -136,33 +106,32 @@ void write_lock()
 {
 	int i;
 
-	DEBUG_PRINT("write: going for mutex wait, rw=%p and mut=%p...\n",
-	            sem_rw, sem_mutex);
+	DEBUG_PRINT("notice: write-lock: going for mutex wait\n");
 
 	// in case we have multiple writers
 	sem_wait(sem_mutex);
 	
-	DEBUG_PRINT("write: going for write wait...\n");
+	DEBUG_PRINT("notice: write-lock: going for write wait...\n");
 			
 	for(i = 0; i < MAX_READERS_AT_ONCE; i++)
 	{
-		DEBUG_PRINT("write: iteration %d\n", i);
+		DEBUG_PRINT("notice: write-lock: iteration %d\n", i);
 		// we have a maximum number of readers
 		// but we want to be able to read simultaneously
 		sem_wait(sem_rw);
 	}
 
-	DEBUG_PRINT("write: going for mutex post...\n");
+	DEBUG_PRINT("notice: write-lock: going for mutex post...\n");
 
 	// we shouldn't have problems with multiple writers now
 	sem_post(sem_mutex);
 	
-	DEBUG_PRINT("write: done\n");
+	DEBUG_PRINT("notice: write-lock: done\n");
 }
 
 void write_unlock()
 {
-	DEBUG_PRINT("writeunlock\n");
+	DEBUG_PRINT("notice: write-unlock\n");
 	
 	int i;
 
