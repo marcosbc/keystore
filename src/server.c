@@ -431,7 +431,7 @@ int store_server_init()
 	DEBUG_PRINT("notice: database starting\n");
 
 	// why or? so we make sure there are no conflicts
-	if(-1 != (shmid = shmget(shm_key, sizeof(struct info), 0600))
+	if(-1 != (shmid = shmget(shm_key, sizeof(struct info), 0644))
 	   || (store_info *) -1 != (store = shmat(shmid, NULL, 0)))
 	{
 		error = ERR_SESSION;
